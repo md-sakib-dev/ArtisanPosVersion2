@@ -1,5 +1,4 @@
 
-import Sidebar from './components/layout/Sidebar'
 import './App.css'
 import { BrowserRouter,Routes,Route } from 'react-router-dom'
 import SidebarLayout from './layout/SidebarLayout'
