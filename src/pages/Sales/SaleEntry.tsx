@@ -23,7 +23,7 @@ import {
   Minimize2,
   X,
   ShoppingCart,
-  UserRound,
+  // UserRound,
 } from "lucide-react";
 
 import {
@@ -95,23 +95,23 @@ const masterProducts: MasterProduct[] = [
 // REUSABLE STYLES
 // ======================================================
 
-const inputClass = `
-  h-9
-  w-full
-  rounded-md
-  border
-  border-[#D5DBD2]
-  bg-white
-  px-3
-  text-sm
-  text-[#263027]
-  outline-none
-  transition
-  placeholder:text-[#9AA29C]
-  focus:border-[#596B4F]
-  focus:ring-2
-  focus:ring-[#596B4F]/10
-`;
+// const inputClass = `
+//   h-9
+//   w-full
+//   rounded-md
+//   border
+//   border-[#D5DBD2]
+//   bg-white
+//   px-3
+//   text-sm
+//   text-[#263027]
+//   outline-none
+//   transition
+//   placeholder:text-[#9AA29C]
+//   focus:border-[#596B4F]
+//   focus:ring-2
+//   focus:ring-[#596B4F]/10
+// `;
 
 const smallInputClass = `
   h-8
