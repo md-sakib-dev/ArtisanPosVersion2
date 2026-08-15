@@ -2,30 +2,47 @@
 import Sidebar from './components/layout/Sidebar'
 import './App.css'
 import { BrowserRouter,Routes,Route } from 'react-router-dom'
+import SidebarLayout from './layout/SidebarLayout'
+import PosLayout from './layout/PosLayout'
 import Dashboard from './pages/Dashboard/Dashboard'
 import SaleEntry from './pages/Sales/SaleEntry'
 import Stock from './pages/Products/Stock'
 function App() {
 
 return(
-  <BrowserRouter>
- <div className="min-h-screen bg-[#F5F2EA] flex">
-  <Sidebar/>
-      <main className="flex-1 p-6">
-        <Routes>
+      <BrowserRouter>
 
-        <Route
-              path="/"
-              element={<Dashboard />}
-            />
-            <Route path='/saleentry' element={<SaleEntry/>}/>
-            <Route path='/stock' element={<Stock/>}/>
+      <Routes>
 
-        </Routes>
-      </main>
-    </div>
+        {/* Normal Application Layout */}
+        <Route element={<SidebarLayout />}>
 
-  </BrowserRouter>
+          <Route
+            path="/"
+            element={<Dashboard />}
+          />
+
+          <Route
+            path="/stock"
+            element={<Stock />}
+          />
+
+        </Route>
+
+
+        {/* POS Layout */}
+        <Route element={<PosLayout />}>
+
+          <Route
+            path="/saleentry"
+            element={<SaleEntry />}
+          />
+
+        </Route>
+
+      </Routes>
+
+    </BrowserRouter>
 )
 }
 
