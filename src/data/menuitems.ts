@@ -7,6 +7,10 @@ import {
   Receipt,
   BarChart3,
   Settings,
+  PackageCheck,
+  RotateCcw,
+  Gift,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { MenuItem } from "../types/menu";
 export const menuItems: MenuItem[] = [
@@ -39,6 +43,16 @@ export const menuItems: MenuItem[] = [
         icon: Receipt,
           path: "/products",
       },
+      {
+        label: "Product Receive",
+        icon: PackageCheck,
+          path: "/productreceive",
+      },
+      {
+        label: "Factory Return",
+        icon: RotateCcw,
+          path: "/factoryreturn",
+      },
     ],
   },
   {
@@ -53,7 +67,7 @@ export const menuItems: MenuItem[] = [
       {
         label: "Stock Transfer",
         icon: Package,
-          path: "/products",
+          path: "/stocktransfer",
       },
     ],
   },
@@ -80,6 +94,21 @@ export const menuItems: MenuItem[] = [
         label: "Returns",
         icon: Receipt,
           path: "/products",
+      },
+      {
+        label: "Voucher Entry",
+        icon: Receipt,
+          path: "/voucherentry",
+      },
+      {
+        label: "Gift Voucher Receive",
+        icon: Gift,
+          path: "/giftvoucherreceive",
+      },
+      {
+        label: "Voucher Transfer",
+        icon: ArrowLeftRight,
+          path: "/vouchertransfer",
       },
     ],
   },

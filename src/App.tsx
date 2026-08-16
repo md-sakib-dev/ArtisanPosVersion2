@@ -6,6 +6,12 @@ import PosLayout from './layout/PosLayout'
 import Dashboard from './pages/Dashboard/Dashboard'
 import SaleEntry from './pages/Sales/SaleEntry'
 import Stock from './pages/Products/Stock'
+import VoucherEntry from './pages/Sales/VoucherEntry'
+import ProductReceive from './pages/Purchase/ProductReceive'
+import FactoryReturn from './pages/Purchase/FactoryReturn'
+import GiftVoucherReceive from './pages/Sales/GiftVoucherReceive'
+import StockTransfer from './pages/Products/StockTransfer'
+import VoucherTransfer from './pages/Sales/VoucherTransfer'
 function App() {
 
 return(
@@ -25,6 +31,12 @@ return(
             path="/stock"
             element={<Stock />}
           />
+          <Route path='/voucherentry' element={<VoucherEntry/>}/>
+          <Route path='/productreceive' element={<ProductReceive/>}/>
+          <Route path='/factoryreturn' element={<FactoryReturn/>}/>
+          <Route path='/giftvoucherreceive' element={<GiftVoucherReceive/>}/>
+          <Route path='/stocktransfer' element={<StockTransfer/>}/>
+          <Route path='/vouchertransfer' element={<VoucherTransfer/>}/>
 
         </Route>
 
