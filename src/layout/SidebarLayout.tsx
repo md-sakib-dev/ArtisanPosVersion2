@@ -1,14 +1,13 @@
-
-import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
-import Sidebar from '../components/layout/Sidebar'
-
-
+import { useState } from "react";
+import { Outlet } from "react-router-dom";
+import Sidebar from "../components/layout/Sidebar";
+import Header from "../components/layout/Header";
 
 const SidebarLayout = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
- return (
-    <div className="min-h-screen bg-[#F5F2EA]">
+
+  return (
+    <div className="h-dvh w-full overflow-hidden bg-[#F5F2EA]">
 
       <Sidebar
         isCollapsed={isCollapsed}
@@ -17,18 +16,24 @@ const SidebarLayout = () => {
 
       <main
         className={`
-          min-h-screen
-          p-6
+          h-dvh
+          overflow-hidden
           transition-all
           duration-300
           ${isCollapsed ? "ml-20" : "ml-64"}
         `}
       >
-        <Outlet />
+         <Header
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+        />
+        <div className="h-[calc(100%-4rem)] overflow-hidden">
+          <Outlet />
+        </div>
       </main>
 
     </div>
   );
-  
-}
-export default SidebarLayout
+};
+
+export default SidebarLayout;
