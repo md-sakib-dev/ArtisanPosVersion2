@@ -2,7 +2,7 @@
 import { menuItems } from "../../data/menuitems";
 
 import SidebarMenu from "./SidebarMenu";
-// import { ChevronLeft ,ChevronRight} from "lucide-react";
+import { ChevronLeft ,ChevronRight} from "lucide-react";
 interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
@@ -68,7 +68,7 @@ function Sidebar({
 
 
       {/* Floating Handle */}
-      {/* <button
+      <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className="
           fixed
@@ -96,7 +96,7 @@ function Sidebar({
         ) : (
           <ChevronLeft size={16} />
         )}
-      </button> */}
+      </button>
 
     </aside>
   );
