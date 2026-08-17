@@ -21,7 +21,7 @@ function Sidebar({
         z-40
         h-screen
         overflow-y-auto
-        bg-[#354536]
+        bg-[#8A9A5B]
         text-white
         transition-all
         duration-300

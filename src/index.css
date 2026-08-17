@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+@theme {
+  /* Executive dashboard palette */
+  --color-canvas: #f4f6f9;
+  --color-ink: #0f172a;
+  --color-soft: #64748b;
+  --color-faint: #94a3b8;
+  --color-line: #e2e8f0;
+
+  --color-brand: #2d5597;
+  --color-brand-deep: #24467c;
+  --color-navy: #1e293b;
+
+  --color-mint: #3aafa9;
+  --color-mint-deep: #2f918c;
+
+  --color-cyan: #50b4d8;
+  --color-cyan-deep: #0e8fbf;
+
+  --color-gold: #e2ba48;
+  --color-gold-deep: #c9a02e;
+
+  --color-danger: #e53e3e;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
