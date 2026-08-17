@@ -29,9 +29,9 @@ const Header = ({
         h-16
         w-full
         shrink-0
-        bg-[#F5F2EA]
+        bg-[#F2EEE4]
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         flex
         items-center
         justify-between
@@ -52,8 +52,8 @@ const Header = ({
             items-center
             justify-center
             rounded-lg
-            text-[#354536]
-            hover:bg-[#F5F2EA]
+            text-[#10673E]
+            hover:bg-[#E8F5ED]
             transition-colors
           "
           title="Toggle Sidebar"
@@ -87,8 +87,8 @@ const Header = ({
             py-2
             text-sm
             font-medium
-            text-[#354536]
-            hover:bg-[#F5F2EA]
+            text-[#10673E]
+            hover:bg-[#E8F5ED]
             transition-colors
           "
         >

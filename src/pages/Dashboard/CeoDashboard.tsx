@@ -1,57 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  ArrowLeftRight,
   ArrowRight,
-  Bell,
-  Building2,
   CalendarRange,
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
-  Clock,
   Crown,
   Flame,
   MapPin,
-  PackageCheck,
-  PackagePlus,
-  RefreshCw,
-  RotateCcw,
-  Search,
   ShoppingCart,
   Store,
   TrendingDown,
   TrendingUp,
   TriangleAlert,
   Warehouse,
-  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   DonutChart,
   GroupedBarChart,
-  Heatmap,
   RadialGauge,
-  SimpleBars,
   Sparkline,
   TrendChart,
 } from "./ceo/charts";
 import {
   CATEGORIES,
   CATEGORY_TOTAL,
-  FEED,
-  HEATMAP,
   KPIS,
   MONTHLY_COMPARISON,
   MONTHLY_TARGET,
-  NOTIFICATIONS,
   OUTLETS,
   PAYMENTS,
   PERIOD_OPTIONS,
-  RECENT_ORDERS,
   SERIES,
-  SIZE_DISTRIBUTION,
-  STORES,
   TOP_OUTLETS_MONTHLY,
   TOP_PRODUCTS,
   fmtBDT,
@@ -60,9 +42,6 @@ import {
   fmtNum,
 } from "./ceo/data";
 import type {
-  FeedType,
-  NotificationItem,
-  OrderStatus,
   OutletMonthly,
   OutletRow,
   OutletStatus,
@@ -503,25 +482,8 @@ function CategoryDistribution() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Heatmap + target + size distribution                                 */
+/* Target progress                                                      */
 /* ------------------------------------------------------------------ */
-
-function PeakHours() {
-  return (
-    <SectionCard
-      title="Peak Sales Hours"
-      subtitle="Average revenue by day & hour · this week"
-      className="xl:col-span-2"
-      action={
-        <span className="rounded-md bg-canvas px-2 py-1 text-[11px] font-medium text-soft">
-          Fri & Sat are busiest
-        </span>
-      }
-    >
-      <Heatmap data={HEATMAP} />
-    </SectionCard>
-  );
-}
 
 function TargetProgress() {
   const pct = Math.round((MONTHLY_TARGET.achieved / MONTHLY_TARGET.target) * 100);
@@ -553,22 +515,6 @@ function TargetProgress() {
           On pace to beat the target by ~8% at the current run-rate.
         </p>
       </div>
-    </SectionCard>
-  );
-}
-
-function SizeDistribution() {
-  const mAndL = SIZE_DISTRIBUTION.filter((s) => s.label === "M" || s.label === "L").reduce(
-    (s, d) => s + d.value,
-    0,
-  );
-  const total = SIZE_DISTRIBUTION.reduce((s, d) => s + d.value, 0);
-  return (
-    <SectionCard title="Size Distribution" subtitle="Units sold by size · this month">
-      <SimpleBars data={SIZE_DISTRIBUTION} />
-      <p className="mt-2 text-[11px] leading-snug text-faint">
-        M & L are the fastest-moving sizes — {Math.round((mAndL / total) * 100)}% of all units sold.
-      </p>
     </SectionCard>
   );
 }
@@ -608,152 +554,14 @@ function PaymentMethods() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Live inventory feed                                                  */
-/* ------------------------------------------------------------------ */
-
-const FEED_TONE: Record<FeedType, { tile: string; Icon: LucideIcon }> = {
-  restock: { tile: "bg-mint/10 text-mint-deep", Icon: PackagePlus },
-  transfer: { tile: "bg-cyan/10 text-cyan-deep", Icon: ArrowLeftRight },
-  receive: { tile: "bg-brand/10 text-brand", Icon: PackageCheck },
-  "low-stock": { tile: "bg-gold/15 text-gold-deep", Icon: TriangleAlert },
-  stockout: { tile: "bg-danger/10 text-danger", Icon: XCircle },
-};
-
-function InventoryFeed() {
-  return (
-    <SectionCard
-      title="Inventory & Stock Alerts"
-      subtitle={
-        <span className="inline-flex items-center gap-1.5">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-danger" />
-          </span>
-          Live · refreshes every 30s
-        </span>
-      }
-      action={
-        <button
-          className="flex h-7 w-7 items-center justify-center rounded-md text-faint transition-colors hover:bg-canvas hover:text-ink"
-          title="Refresh feed"
-        >
-          <RefreshCw size={13} />
-        </button>
-      }
-    >
-      <ul className="-mx-1 space-y-0.5">
-        {FEED.map((f) => {
-          const t = FEED_TONE[f.type];
-          return (
-            <li
-              key={f.id}
-              className="flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-canvas/80"
-            >
-              <span
-                className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${t.tile}`}
-              >
-                <t.Icon size={14} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12.5px] font-medium leading-snug text-ink">{f.text}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-faint">
-                  <MapPin size={10} className="shrink-0" />
-                  <span className="truncate">{f.outlet}</span>
-                  <span className="shrink-0">· {f.time}</span>
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </SectionCard>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Recent orders table                                                  */
-/* ------------------------------------------------------------------ */
-
-const ORDER_STATUS: Record<OrderStatus, { label: string; cls: string; Icon: LucideIcon }> = {
-  completed: { label: "Completed", cls: "bg-mint/10 text-mint-deep", Icon: CheckCircle2 },
-  processing: { label: "Processing", cls: "bg-cyan/10 text-cyan-deep", Icon: Clock },
-  returned: { label: "Returned", cls: "bg-danger/10 text-danger", Icon: RotateCcw },
-};
-
-function RecentOrders() {
-  return (
-    <SectionCard
-      title="Recent Transactions"
-      subtitle="Latest orders across all outlets"
-      action={
-        <button className="flex items-center gap-1 text-[12px] font-semibold text-brand transition-colors hover:text-brand-deep">
-          View all <ArrowRight size={13} />
-        </button>
-      }
-    >
-      <div className="-mx-1 overflow-x-auto">
-        <table className="w-full min-w-[420px] text-left text-[12.5px]">
-          <thead>
-            <tr className="border-b border-line/70 text-[10.5px] font-semibold uppercase tracking-wider text-faint">
-              <th className="px-1 pb-2 pr-3">Order</th>
-              <th className="hidden px-1 pb-2 pr-3 sm:table-cell">Customer</th>
-              <th className="hidden px-1 pb-2 pr-3 md:table-cell">Outlet</th>
-              <th className="px-1 pb-2 pr-3 text-right">Total</th>
-              <th className="px-1 pb-2 text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line/60">
-            {RECENT_ORDERS.map((o) => {
-              const s = ORDER_STATUS[o.status];
-              return (
-                <tr key={o.id} className="transition-colors hover:bg-canvas/70">
-                  <td className="px-1 py-2.5 pr-3 font-semibold text-brand tabular-nums">
-                    #{o.id}
-                  </td>
-                  <td className="hidden px-1 py-2.5 pr-3 text-ink sm:table-cell">
-                    {o.customer}
-                    <span className="ml-1.5 text-[10.5px] text-faint">({o.items} items)</span>
-                  </td>
-                  <td className="hidden px-1 py-2.5 pr-3 text-soft md:table-cell">{o.outlet}</td>
-                  <td className="px-1 py-2.5 pr-3 text-right font-semibold text-ink tabular-nums">
-                    {fmtBDT(o.total)}
-                  </td>
-                  <td className="px-1 py-2.5 text-right">
-                    <span
-                      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold ${s.cls}`}
-                    >
-                      <s.Icon size={11} />
-                      {s.label}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-right text-[10.5px] text-faint">Updated 33 seconds ago</p>
-    </SectionCard>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Page                                                                 */
 /* ------------------------------------------------------------------ */
 
-const NOTIF_DOT: Record<NotificationItem["tone"], string> = {
-  mint: "bg-mint",
-  cyan: "bg-cyan",
-  gold: "bg-gold",
-  danger: "bg-danger",
-};
-
 export default function CeoDashboard() {
-  const [period, setPeriod] = useState<PeriodFilter>("week");
+  const [period] = useState<PeriodFilter>("week");
   const [metric, setMetric] = useState<RevenueMetric>("revenue");
   const [sortBy, setSortBy] = useState<ProductSort>("revenue");
-  const [store, setStore] = useState("All Stores");
-  const [bellOpen, setBellOpen] = useState(false);
+  const [store] = useState("All Stores");
   const [rangeStart, setRangeStart] = useState("2026-08-03");
   const [rangeEnd, setRangeEnd] = useState("2026-08-16");
   const [customRange, setCustomRange] = useState("3 Aug – 16 Aug");
@@ -793,15 +601,9 @@ export default function CeoDashboard() {
         {/* ---------- Executive header ---------- */}
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[12px] font-medium text-soft">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-mint opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-mint" />
-              </span>
-              All systems operational
-            </div>
+           
             <h1 className="mt-1 text-xl font-bold tracking-tight text-ink md:text-2xl">
-              Executive Overview
+              Dashboard
             </h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12.5px] text-faint">
               <LiveClock />
@@ -810,103 +612,12 @@ export default function CeoDashboard() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Global search */}
-            <div className="relative hidden lg:block">
-              <Search
-                size={15}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
-              />
-              <input
-                type="text"
-                placeholder="Search outlets, products, orders…"
-                className="h-9 w-64 rounded-md border border-line bg-white pl-8 pr-14 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-cyan focus:ring-2 focus:ring-cyan/20"
-              />
-              <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-line bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-faint">
-                ⌘K
-              </kbd>
-            </div>
-
-            {/* Store selector */}
-            <div className="relative">
-              <Building2
-                size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint"
-              />
-              <select
-                value={store}
-                onChange={(e) => setStore(e.target.value)}
-                className="h-9 w-44 cursor-pointer appearance-none rounded-md border border-line bg-white pl-8 pr-8 text-[13px] font-medium text-ink outline-none transition-colors focus:border-cyan focus:ring-2 focus:ring-cyan/20"
-              >
-                {STORES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-faint"
-              />
-            </div>
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setBellOpen((v) => !v)}
-                className="relative flex h-9 w-9 items-center justify-center rounded-md border border-line bg-white text-soft transition-colors hover:text-ink"
-                title="Notifications"
-              >
-                <Bell size={16} />
-                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[9px] font-bold text-white">
-                  {NOTIFICATIONS.length}
-                </span>
-              </button>
-              {bellOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
-                  <div className="absolute right-0 top-full z-20 mt-2 w-80 overflow-hidden rounded-md border border-line bg-white shadow-lg">
-                    <div className="flex items-center justify-between border-b border-line/70 px-3.5 py-2.5">
-                      <p className="text-[13px] font-bold text-ink">Notifications</p>
-                      <button className="text-[11.5px] font-semibold text-brand hover:text-brand-deep">
-                        Mark all as read
-                      </button>
-                    </div>
-                    <ul className="max-h-72 overflow-y-auto p-1.5">
-                      {NOTIFICATIONS.map((n) => (
-                        <li
-                          key={n.id}
-                          className="flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-canvas/80"
-                        >
-                          <span
-                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${NOTIF_DOT[n.tone]}`}
-                          />
-                          <div className="min-w-0">
-                            <p className="text-[12.5px] leading-snug text-ink">{n.text}</p>
-                            <p className="mt-0.5 text-[11px] text-faint">{n.meta}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Avatar */}
-            <div
-              className="relative flex h-9 w-9 items-center justify-center rounded-full bg-navy text-[12px] font-bold text-white"
-              title="CEO"
-            >
-              MB
-              <span className="absolute -bottom-0 -right-0 h-3 w-3 rounded-full border-2 border-canvas bg-mint" />
-            </div>
-          </div>
+          
         </header>
 
         {/* ---------- Filter pills ---------- */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-white p-1 shadow-xs">
+          {/* <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-white p-1 shadow-xs">
             {PERIOD_OPTIONS.map((p) => (
               <button
                 key={p.key}
@@ -920,12 +631,9 @@ export default function CeoDashboard() {
                 {p.label}
               </button>
             ))}
-          </div>
+          </div> */}
 
-          <div className="flex items-center gap-2 text-[12px] text-faint">
-            <RefreshCw size={13} />
-            <span className="tabular-nums">Last updated 2 min ago</span>
-          </div>
+         
         </div>
 
         {period === "custom" && (
@@ -993,14 +701,16 @@ export default function CeoDashboard() {
                 <div className="mt-1.5 flex items-center gap-2.5 text-[11px] font-medium">
                   <span className="flex items-center gap-1 text-mint-deep">
                     <span className="h-1.5 w-1.5 rounded-full bg-mint" />
-                    {kpi.outlets.online} online
+                    {kpi.outlets.online} Active
                   </span>
-                  <span className="flex items-center gap-1 text-danger">
+                  {/* <span className="flex items-center gap-1 text-danger">
                     <span className="h-1.5 w-1.5 rounded-full bg-danger" />
                     {kpi.outlets.offline} offline
-                  </span>
+                  </span> */}
                 </div>
-                <p className="text-[11px] text-faint">{kpi.outlets.compare}</p>
+                <p className="text-[11px] text-faint">
+                  All over in Bangladesh
+                  </p>
               </>
             }
             delta={kpi.outlets.delta}
@@ -1017,7 +727,7 @@ export default function CeoDashboard() {
               <>
                 <p className="mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-gold-deep">
                   <TriangleAlert size={12} />
-                  {kpi.stock.lowStock} low-stock alerts
+                   All inventory stocks
                 </p>
                 <p className="text-[11px] text-faint">{kpi.stock.compare}</p>
               </>
@@ -1106,13 +816,10 @@ export default function CeoDashboard() {
           <CategoryDistribution />
         </div>
 
-        {/* ---------- Heatmap + target/sizes ---------- */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <PeakHours />
-          <div className="flex flex-col gap-4 xl:col-span-1">
-            <TargetProgress />
-            <SizeDistribution />
-          </div>
+        {/* ---------- Target + payments ---------- */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <TargetProgress />
+          <PaymentMethods />
         </div>
 
         {/* ---------- Outlet rankings ---------- */}
@@ -1121,22 +828,13 @@ export default function CeoDashboard() {
           <MonthlyTopOutlets outlets={TOP_OUTLETS_MONTHLY} />
         </div>
 
-        {/* ---------- Payments + inventory + transactions ---------- */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-          <PaymentMethods />
-          <InventoryFeed />
-          <div className="xl:col-span-2">
-            <RecentOrders />
-          </div>
-        </div>
-
         {/* ---------- Footer ---------- */}
         <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2 text-[11px] text-faint">
-          <p>All figures in BDT · Data refreshes automatically every 30 seconds</p>
+          {/* <p>All figures in BDT · Data refreshes automatically every 30 seconds</p>
           <p className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-mint" />
             Last synced 2 minutes ago
-          </p>
+          </p> */}
         </footer>
       </div>
     </div>

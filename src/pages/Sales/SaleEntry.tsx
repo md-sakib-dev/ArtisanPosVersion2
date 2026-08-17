@@ -6,7 +6,6 @@ import {
   Phone,
   Settings,
   Percent,
-  BadgeDollarSign,
   Printer,
   FileText,
   ArrowLeftRight,
@@ -25,8 +24,9 @@ import {
   ShoppingCart,
   // UserRound,
 } from "lucide-react";
-
+import logo from "../../assets/logo.png"
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 // ======================================================
 // TYPES
@@ -94,17 +94,17 @@ const masterProducts: MasterProduct[] = [
 //   w-full
 //   rounded-md
 //   border
-//   border-[#D5DBD2]
+//   border-[#DDE5DF]
 //   bg-white
 //   px-3
 //   text-sm
-//   text-[#263027]
+//   text-[#17231D]
 //   outline-none
 //   transition
 //   placeholder:text-[#9AA29C]
-//   focus:border-[#596B4F]
+//   focus:border-[#0E9351]
 //   focus:ring-2
-//   focus:ring-[#596B4F]/10
+//   focus:ring-[#0E9351]/15
 // `;
 
 const smallInputClass = `
@@ -112,16 +112,32 @@ const smallInputClass = `
   w-full
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-2.5
-  text-xs
-  text-[#263027]
+  text-sm
+  text-[#17231D]
   outline-none
   transition
-  focus:border-[#596B4F]
+  focus:border-[#0E9351]
   focus:ring-2
-  focus:ring-[#596B4F]/10
+  focus:ring-[#0E9351]/15
+`;
+const smallAdjnputClass = `
+  h-8
+  w-32
+  rounded-md
+  border
+  border-[#DDE5DF]
+  bg-white
+  px-2.5
+  text-sm
+  text-[#17231D]
+  outline-none
+  transition
+  focus:border-[#0E9351]
+  focus:ring-2
+  focus:ring-[#0E9351]/15
 `;
 
 const secondaryButtonClass = `
@@ -132,15 +148,15 @@ const secondaryButtonClass = `
   gap-1.5
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-3
-  text-xs
+  text-sm
   font-medium
-  text-[#354536]
+  text-[#10673E]
   transition
-  hover:border-[#596B4F]
-  hover:bg-[#F3F6F0]
+  hover:border-[#0E9351]
+  hover:bg-[#F1F8F3]
   active:scale-[0.98]
 `;
 
@@ -151,13 +167,13 @@ const primaryButtonClass = `
   justify-center
   gap-1.5
   rounded-md
-  bg-[#354536]
+  bg-[#0E9351]
   px-4
-  text-xs
+  text-sm
   font-semibold
   text-white
   transition
-  hover:bg-[#4E6048]
+  hover:bg-[#10673E]
   active:scale-[0.98]
 `;
 
@@ -205,7 +221,7 @@ function PaymentModal({
         overflow-hidden
         rounded-xl
         border
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         shadow-2xl
       "
@@ -224,11 +240,11 @@ function PaymentModal({
           <div>
             <p
               className="
-              text-[10px]
+              text-sm
               font-semibold
               uppercase
               tracking-wider
-              text-[#7A847C]
+              text-[#66736B]
             "
             >
               Payment
@@ -239,7 +255,7 @@ function PaymentModal({
               mt-0.5
               text-lg
               font-semibold
-              text-[#263027]
+              text-[#17231D]
             "
             >
               {title}
@@ -252,10 +268,10 @@ function PaymentModal({
             className="
               rounded-md
               p-1.5
-              text-[#687269]
+              text-[#66736B]
               transition
-              hover:bg-[#F1F4EF]
-              hover:text-[#354536]
+              hover:bg-[#F1F8F3]
+              hover:text-[#10673E]
             "
           >
             <X size={19} />
@@ -267,9 +283,9 @@ function PaymentModal({
             className="
             mb-2
             block
-            text-xs
+            text-sm
             font-medium
-            text-[#5F6861]
+            text-[#66736B]
           "
           >
             Amount
@@ -285,15 +301,15 @@ function PaymentModal({
               w-full
               rounded-md
               border
-              border-[#D5DBD2]
+              border-[#DDE5DF]
               px-3
               text-lg
               font-semibold
-              text-[#263027]
+              text-[#17231D]
               outline-none
-              focus:border-[#596B4F]
+              focus:border-[#0E9351]
               focus:ring-2
-              focus:ring-[#596B4F]/10
+              focus:ring-[#0E9351]/15
             "
           />
 
@@ -562,9 +578,9 @@ function SaleEntry() {
       w-full
       flex-col
       overflow-hidden
-      bg-[#F4F1E8]
+      bg-[#F5F7F3]
       p-2
-      text-[#263027]
+      text-[#17231D]
     "
     >
       {/* ================================================= */}
@@ -579,8 +595,8 @@ function SaleEntry() {
         items-center
         justify-between
         border-b
-        border-[#D9DED5]
-        bg-[#354536]
+        border-[#DDE5DF]
+        bg-[#10673E]
         px-3
         text-white
       "
@@ -603,7 +619,9 @@ function SaleEntry() {
             bg-white/10
           "
           >
-            <ShoppingCart size={16} />
+            <Link to="/">
+              <ShoppingCart size={16} />
+            </Link>
           </div>
 
           <div>
@@ -620,21 +638,29 @@ function SaleEntry() {
             <p
               className="
               mt-0.5
-              text-[9px]
+              text-sm
               text-white/60
             "
             >
               Point of Sale
             </p>
           </div>
+          <div>
+          <img
+          src={logo}
+          alt="Company Logo"
+          className="h-8 w-auto object-contain"
+        />
         </div>
+        </div>
+        
 
         <div
           className="
           flex
           items-center
           gap-5
-          text-[10px]
+          text-sm
           text-white/70
         "
         >
@@ -663,280 +689,7 @@ function SaleEntry() {
       </header>
 
       {/* ================================================= */}
-      {/* TOP INPUT AREA */}
-      {/* ================================================= */}
-
-      <section
-        className="
-        mt-2
-        shrink-0
-        border
-        border-[#D9DED5]
-        bg-white
-        p-2.5
-      "
-      >
-        <div
-          className="
-          grid
-          grid-cols-1
-          gap-3
-          xl:grid-cols-[1fr_1.4fr]
-        "
-        >
-          {/* PRODUCT INPUT */}
-
-          <div
-            className="
-            grid
-            grid-cols-3
-            gap-2
-          "
-          >
-            <Field label="Barcode" icon={<Scan size={13} />}>
-              <div
-                className="
-                flex
-                gap-1.5
-              "
-              >
-                <input
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleAddProduct();
-                    }
-                  }}
-                  className={smallInputClass}
-                  placeholder="Scan barcode"
-                />
-
-                <label
-                  className="
-                  flex
-                  h-8
-                  w-8
-                  shrink-0
-                  cursor-pointer
-                  items-center
-                  justify-center
-                  rounded-md
-                  border
-                  border-[#D5DBD2]
-                  bg-[#F8FAF6]
-                "
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSpEnabled}
-                    onChange={(e) => setIsSpEnabled(e.target.checked)}
-                    className="
-                      h-3.5
-                      w-3.5
-                      accent-[#354536]
-                    "
-                  />
-                </label>
-              </div>
-            </Field>
-
-            <Field label="SP Code" icon={<Package size={13} />}>
-              <input
-                value={spCodeInput}
-                disabled={!isSpEnabled}
-                onChange={(e) => setSpCodeInput(e.target.value)}
-                className="
-                  h-8
-                  w-full
-                  rounded-md
-                  border
-                  border-[#D5DBD2]
-                  bg-white
-                  px-2.5
-                  text-xs
-                  outline-none
-                  focus:border-[#596B4F]
-                  disabled:cursor-not-allowed
-                  disabled:bg-[#F3F4F2]
-                  disabled:text-gray-400
-                "
-                placeholder="SP code"
-              />
-            </Field>
-
-            <Field label="Quantity" icon={<Hash size={13} />}>
-              <div
-                className="
-                flex
-                gap-1.5
-              "
-              >
-                <input
-                  type="number"
-                  min={1}
-                  value={qtyInput}
-                  onChange={(e) => setQtyInput(Number(e.target.value))}
-                  className="
-                    h-8
-                    min-w-0
-                    flex-1
-                    rounded-md
-                    border
-                    border-[#D5DBD2]
-                    px-2
-                    text-center
-                    text-xs
-                    outline-none
-                    focus:border-[#596B4F]
-                  "
-                />
-
-                <button
-                  type="button"
-                  onClick={handleAddProduct}
-                  className="
-                    flex
-                    h-8
-                    w-8
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-md
-                    bg-[#354536]
-                    text-white
-                    transition
-                    hover:bg-[#4E6048]
-                  "
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-            </Field>
-          </div>
-
-          {/* CUSTOMER / DISCOUNT */}
-
-          <div
-            className="
-            grid
-            grid-cols-4
-            gap-2
-            lg:grid-cols-5
-          "
-          >
-            <Field label="Customer Phone" icon={<Phone size={13} />}>
-              <input
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className={smallInputClass}
-                placeholder="Phone number"
-              />
-            </Field>
-
-            <Field label="Adjustment" icon={<Settings size={13} />}>
-              <input
-                type="number"
-                value={adjustment}
-                onChange={(e) => setAdjustment(Number(e.target.value))}
-                className={smallInputClass}
-              />
-            </Field>
-
-            <Field label="Invoice Discount" icon={<Percent size={13} />}>
-              <select
-                value={invoiceDiscount}
-                onChange={(e) => setInvoiceDiscount(Number(e.target.value))}
-                disabled={hasProductDiscount}
-                className="
-                  h-8
-                  w-full
-                  rounded-md
-                  border
-                  border-[#D5DBD2]
-                  bg-white
-                  px-2
-                  text-xs
-                  outline-none
-                  focus:border-[#596B4F]
-                  disabled:bg-[#F3F4F2]
-                "
-              >
-                <option value={0}>No Discount</option>
-
-                <option value={5}>5%</option>
-
-                <option value={10}>10%</option>
-
-                <option value={15}>15%</option>
-
-                <option value={20}>20%</option>
-              </select>
-            </Field>
-
-            <Field label="Discount Amount" icon={<BadgeDollarSign size={13} />}>
-              <input
-                readOnly
-                value={invoiceDiscountAmount.toFixed(2)}
-                className="
-                  h-8
-                  w-full
-                  rounded-md
-                  border
-                  border-[#E3E7E0]
-                  bg-[#F6F8F5]
-                  px-2.5
-                  text-right
-                  text-xs
-                  font-medium
-                  text-[#354536]
-                "
-              />
-            </Field>
-
-            <div
-              className="
-              hidden
-              items-end
-              lg:flex
-            "
-            >
-              <button
-                type="button"
-                onClick={toggleFullScreen}
-                className="
-                  flex
-                  h-8
-                  w-full
-                  items-center
-                  justify-center
-                  gap-1.5
-                  rounded-md
-                  border
-                  border-[#D5DBD2]
-                  bg-white
-                  text-[10px]
-                  font-medium
-                  text-[#354536]
-                  transition
-                  hover:bg-[#F3F6F0]
-                "
-              >
-                {isFullScreen ? (
-                  <Minimize2 size={13} />
-                ) : (
-                  <Maximize2 size={13} />
-                )}
-
-                {isFullScreen ? "Exit Fullscreen" : "Fullscreen"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================= */}
-      {/* MAIN AREA */}
+      {/* MAIN AREA — INPUT + TABLE (left) | PAYMENT (right) */}
       {/* ================================================= */}
 
       <div
@@ -949,24 +702,199 @@ function SaleEntry() {
         overflow-hidden
       "
       >
-        {/* ================================================= */}
-        {/* PRODUCT TABLE */}
-        {/* ================================================= */}
+        {/* LEFT COLUMN: TOP INPUT + PRODUCT TABLE */}
 
-        <section
+        <div
           className="
           flex
-          min-h-0
           min-w-0
           flex-1
           flex-col
-          overflow-hidden
-          border
-          border-[#D9DED5]
-          bg-white
+          gap-2
         "
         >
-          {/* <div
+          {/* TOP INPUT AREA */}
+
+          <section
+            className="
+            shrink-0
+            border
+            border-[#DDE5DF]
+            bg-white
+            p-2.5
+          "
+          >
+            <div className="flex flex-col gap-3 xl:flex-row">
+              {/* PRODUCT INPUT */}
+              <div className="flex flex-1 gap-2">
+                {/* Barcode - bigger */}
+                <div className="flex-[1.6]">
+                  <Field label="Barcode" icon={<Scan size={13} />}>
+                    <div className="flex gap-1.5">
+                      <input
+                        value={barcodeInput}
+                        onChange={(e) => setBarcodeInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleAddProduct();
+                          }
+                        }}
+                        className={smallInputClass}
+                        placeholder="Scan barcode"
+                      />
+
+                      <label
+                        className="
+              flex h-8 w-8 shrink-0 cursor-pointer
+              items-center justify-center rounded-md
+              border border-[#DDE5DF]
+              bg-[#F1F8F3]
+            "
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSpEnabled}
+                          onChange={(e) => setIsSpEnabled(e.target.checked)}
+                          className="h-3.5 w-3.5 accent-[#0E9351]"
+                        />
+                      </label>
+                    </div>
+                  </Field>
+                </div>
+
+                {/* SP Code */}
+                <div className="flex-1">
+                  <Field label="SP Code" icon={<Package size={13} />}>
+                    <input
+                      value={spCodeInput}
+                      disabled={!isSpEnabled}
+                      onChange={(e) => setSpCodeInput(e.target.value)}
+                      className="
+            h-8 w-full rounded-md
+            border border-[#DDE5DF]
+            bg-white px-2.5 text-sm
+            outline-none
+            focus:border-[#0E9351]
+            disabled:cursor-not-allowed
+            disabled:bg-[#F3F4F2]
+            disabled:text-gray-400
+          "
+                      placeholder="SP code"
+                    />
+                  </Field>
+                </div>
+
+                {/* Quantity */}
+                <div className="w-28 shrink-0">
+                  <Field label="Quantity" icon={<Hash size={13} />}>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        value={qtyInput}
+                        onChange={(e) => setQtyInput(Number(e.target.value))}
+                        className="
+              h-8 min-w-0 flex-1
+              rounded-md border border-[#DDE5DF]
+              px-2 text-center text-sm
+              outline-none
+              focus:border-[#0E9351]
+            "
+                      />
+
+                      <button
+                        type="button"
+                        onClick={handleAddProduct}
+                        className="
+              flex h-8 w-8 shrink-0
+              items-center justify-center
+              rounded-md bg-[#0E9351]
+              text-white transition
+              hover:bg-[#10673E]
+            "
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </Field>
+                </div>
+              </div>
+
+              {/* CUSTOMER / DISCOUNT */}
+              <div className="flex flex-1 gap-2">
+                {/* Customer Phone */}
+                <div className="flex-[1.3]">
+                  <Field label="Customer Phone" icon={<Phone size={13} />}>
+                    <input
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className={smallInputClass}
+                      placeholder="Phone number"
+                    />
+                  </Field>
+                </div>
+
+                {/* Adjustment */}
+                <div className="flex-1">
+                  <Field label="Adjustment" icon={<Settings size={13} />}>
+                    <input
+                      type="number"
+                      value={adjustment}
+                      onChange={(e) => setAdjustment(Number(e.target.value))}
+                      className={smallAdjnputClass}
+                    />
+                  </Field>
+                </div>
+
+                {/* Invoice Discount */}
+                <div className="flex-1">
+                  <Field label="Invoice Discount" icon={<Percent size={13} />}>
+                    <select
+                      value={invoiceDiscount}
+                      onChange={(e) =>
+                        setInvoiceDiscount(Number(e.target.value))
+                      }
+                      disabled={hasProductDiscount}
+                      className="
+            h-8 w-full rounded-md
+            border border-[#DDE5DF]
+            bg-white px-2 text-sm
+            outline-none
+            focus:border-[#0E9351]
+            disabled:bg-[#F3F4F2]
+          "
+                    >
+                      <option value={0}>No Discount</option>
+                      <option value={5}>5%</option>
+                      <option value={10}>10%</option>
+                      <option value={15}>15%</option>
+                      <option value={20}>20%</option>
+                    </select>
+                  </Field>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ================================================= */}
+          {/* PRODUCT TABLE */}
+          {/* ================================================= */}
+
+          <section
+            className="
+            flex
+            min-h-0
+            min-w-0
+            flex-1
+            flex-col
+            overflow-hidden
+            border
+            border-[#DDE5DF]
+            bg-white
+          "
+          >
+            {
+              /* <div
             className="
             flex
             h-9
@@ -974,8 +902,8 @@ function SaleEntry() {
             items-center
             justify-between
             border-b
-            border-[#D9DED5]
-            bg-[#F8FAF6]
+            border-[#DDE5DF]
+            bg-[#F1F8F3]
             px-3
           "
           >
@@ -986,13 +914,13 @@ function SaleEntry() {
               gap-2
             "
             >
-              <ShoppingCart size={14} className="text-[#354536]" />
+              <ShoppingCart size={14} className="text-[#10673E]" />
 
               <span
                 className="
-                text-xs
+                text-sm
                 font-semibold
-                text-[#354536]
+                text-[#10673E]
               "
               >
                 Sale Items
@@ -1001,12 +929,12 @@ function SaleEntry() {
               <span
                 className="
                 rounded-full
-                bg-[#E5EAE1]
+                bg-[#E8F5ED]
                 px-2
                 py-0.5
-                text-[9px]
+                text-sm
                 font-semibold
-                text-[#596B4F]
+                text-[#66736B]
               "
               >
                 {totalItems}
@@ -1015,305 +943,305 @@ function SaleEntry() {
 
             <span
               className="
-              text-[10px]
-              text-[#7A847C]
+              text-sm
+              text-[#66736B]
             "
             >
               {totalQty} units
             </span>
-          </div> */}
+          </div> */
 
-          <div
-            className="
+              <div
+                className="
             min-h-0
             flex-1
             overflow-auto
           "
-          >
-            <table
-              className="
+              >
+                <table
+                  className="
               w-full
               min-w-[850px]
               border-collapse
-              text-xs
+              text-sm
             "
-            >
-              <thead
-                className="
+                >
+                  <thead
+                    className="
                 sticky
                 top-0
                 z-10
-                bg-[#354536]
+                bg-[#10673E]
                 text-white
               "
-              >
-                <tr>
-                  <th
-                    className="
+                  >
+                    <tr>
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-left
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Barcode
-                  </th>
+                      >
+                        Barcode
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-left
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Product
-                  </th>
+                      >
+                        Product
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-center
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Qty
-                  </th>
+                      >
+                        Qty
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-right
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Unit Price
-                  </th>
+                      >
+                        Unit Price
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-center
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Disc%
-                  </th>
+                      >
+                        Disc%
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-right
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Total
-                  </th>
+                      >
+                        Total
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-right
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Net Price
-                  </th>
+                      >
+                        Net Price
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-center
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    SP
-                  </th>
+                      >
+                        SP
+                      </th>
 
-                  <th
-                    className="
+                      <th
+                        className="
                     px-3
                     py-2.5
                     text-center
-                    text-[10px]
+                    text-sm
                     font-semibold
                   "
-                  >
-                    Action
-                  </th>
-                </tr>
-              </thead>
+                      >
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
 
-              <tbody>
-                {products.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          className="
                         py-16
                         text-center
                       "
-                    >
-                      <div
-                        className="
+                        >
+                          <div
+                            className="
                         flex
                         flex-col
                         items-center
                         justify-center
                         text-[#9AA29C]
                       "
-                      >
-                        <ShoppingCart size={30} strokeWidth={1.5} />
+                          >
+                            <ShoppingCart size={30} strokeWidth={1.5} />
 
-                        <p
-                          className="
+                            <p
+                              className="
                           mt-2
-                          text-xs
+                          text-sm
                           font-medium
                         "
-                        >
-                          No products added
-                        </p>
+                            >
+                              No products added
+                            </p>
 
-                        <p
-                          className="
+                            <p
+                              className="
                           mt-1
-                          text-[10px]
+                          text-sm
                         "
-                        >
-                          Scan a barcode to add products
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  products.map((product) => {
-                    const total = product.qty * product.unitPrice;
+                            >
+                              Scan a barcode to add products
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      products.map((product) => {
+                        const total = product.qty * product.unitPrice;
 
-                    const discountedTotal =
-                      total - (total * product.disc) / 100;
+                        const discountedTotal =
+                          total - (total * product.disc) / 100;
 
-                    return (
-                      <tr
-                        key={product.id}
-                        className="
+                        return (
+                          <tr
+                            key={product.id}
+                            className="
                             border-b
                             border-[#ECEFEA]
                             transition-colors
-                            hover:bg-[#F6F8F4]
+                            hover:bg-[#F1F8F3]
                           "
-                      >
-                        <td
-                          className="
+                          >
+                            <td
+                              className="
                             px-3
                             py-2.5
-                            text-[#667067]
+                            text-[#66736B]
                           "
-                        >
-                          {product.barcode}
-                        </td>
+                            >
+                              {product.barcode}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             font-medium
-                            text-[#263027]
+                            text-[#17231D]
                           "
-                        >
-                          {product.prodName}
-                        </td>
+                            >
+                              {product.prodName}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-center
                             font-medium
                           "
-                        >
-                          {product.qty}
-                        </td>
+                            >
+                              {product.qty}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-right
                           "
-                        >
-                          {product.unitPrice.toFixed(2)}
-                        </td>
+                            >
+                              {product.unitPrice.toFixed(2)}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-center
-                            text-[#596B4F]
+                            text-[#66736B]
                           "
-                        >
-                          {product.disc}%
-                        </td>
+                            >
+                              {product.disc}%
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-right
                             font-medium
                           "
-                        >
-                          {total.toFixed(2)}
-                        </td>
+                            >
+                              {total.toFixed(2)}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-right
                             font-semibold
-                            text-[#354536]
+                            text-[#10673E]
                           "
-                        >
-                          {discountedTotal.toFixed(2)}
-                        </td>
+                            >
+                              {discountedTotal.toFixed(2)}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-center
                           "
-                        >
-                          {product.spCode || "-"}
-                        </td>
+                            >
+                              {product.spCode || "-"}
+                            </td>
 
-                        <td
-                          className="
+                            <td
+                              className="
                             px-3
                             py-2.5
                             text-center
                           "
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(product.id)}
+                                className="
                                 inline-flex
                                 h-7
                                 w-7
@@ -1324,88 +1252,97 @@ function SaleEntry() {
                                 transition
                                 hover:bg-[#FCECEC]
                               "
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* TABLE SUMMARY */}
+              /* TABLE SUMMARY */
+            }
 
-          <div
-            className="
+            <div
+              className="
             grid
             shrink-0
             grid-cols-4
             border-t
-            border-[#D9DED5]
-            bg-[#F8FAF6]
+            border-[#DDE5DF]
+            bg-[#F1F8F3]
           "
-          >
-            <MiniSummary label="Items" value={totalItems} />
+            >
+              <MiniSummary label="Items" value={totalItems} />
 
-            <MiniSummary label="Quantity" value={totalQty} />
+              <MiniSummary label="Quantity" value={totalQty} />
 
-            <MiniSummary label="Gross Total" value={grossTotal.toFixed(2)} />
+              <MiniSummary label="Gross Total" value={grossTotal.toFixed(2)} />
 
-            <MiniSummary label="SP Items" value={totalSP} />
-          </div>
+              <MiniSummary label="SP Items" value={totalSP} />
+            </div>
 
-          {/* ACTION BUTTONS */}
+            {/* ACTION BUTTONS */}
 
-          <div
-            className="
+            <div
+              className="
             flex
             shrink-0
             flex-wrap
             gap-1.5
             border-t
-            border-[#D9DED5]
+            border-[#DDE5DF]
             bg-white
             p-2
           "
-          >
-            <ActionButton icon={<Printer size={13} />} text="Ref Slip" />
+            >
+              <ActionButton icon={<Printer size={13} />} text="Ref Slip" />
 
-            <ActionButton icon={<FileText size={13} />} text="Reprint" />
+              <ActionButton icon={<FileText size={13} />} text="Reprint" />
 
-            <ActionButton icon={<ArrowLeftRight size={13} />} text="Exchange" />
+              <ActionButton
+                icon={<ArrowLeftRight size={13} />}
+                text="Exchange"
+              />
 
-            <ActionButton icon={<Play size={13} />} text="Resume" />
+              <ActionButton icon={<Play size={13} />} text="Resume" />
 
-            <ActionButton icon={<Pause size={13} />} text="Pause" />
+              <ActionButton icon={<Pause size={13} />} text="Pause" />
 
-            <ActionButton icon={<Save size={13} />} text="Save [F2]" primary />
-          </div>
-        </section>
+              <ActionButton
+                icon={<Save size={13} />}
+                text="Save [F2]"
+                primary
+              />
+            </div>
+          </section>
 
-        {/* ================================================= */}
-        {/* PAYMENT PANEL */}
-        {/* ================================================= */}
+          {/* ================================================= */}
+          {/* PAYMENT PANEL */}
+          {/* ================================================= */}
+        </div>
 
         <aside
           className="
-          flex
-          w-[22%]
-          min-w-[285px]
-          max-w-[370px]
-          shrink-0
-          flex-col
-          overflow-hidden
-          border
-          border-[#D9DED5]
-          bg-white
-        "
+            flex
+            w-[22%]
+            min-w-[285px]
+            max-w-[370px]
+            shrink-0
+            flex-col
+            overflow-hidden
+            border
+            border-[#DDE5DF]
+            bg-white
+          "
         >
           {/* PAYMENT HEADER */}
 
-          <div
+          {/* <div
             className="
             flex
             h-9
@@ -1413,29 +1350,26 @@ function SaleEntry() {
             items-center
             gap-2
             border-b
-            border-[#D9DED5]
-            bg-[#F8FAF6]
+            border-[#DDE5DF]
+            bg-[#F1F8F3]
             px-3
           "
           >
-            <CreditCard size={14} className="text-[#354536]" />
+            <CreditCard size={14} className="text-[#10673E]" />
 
             <span
               className="
-              text-xs
+              text-sm
               font-semibold
-              text-[#354536]
+              text-[#10673E]
             "
             >
               Payment
             </span>
-          </div>
+          </div> */}
 
           <div
             className="
-            min-h-0
-            flex-1
-            overflow-auto
             p-2.5
           "
           >
@@ -1444,9 +1378,9 @@ function SaleEntry() {
             <div
               className="
               rounded-lg
-              bg-[#354536]
-              px-4
-              py-3
+              bg-[#10673E]
+              px-3
+              py-2.5
               text-white
             "
             >
@@ -1455,7 +1389,7 @@ function SaleEntry() {
                 flex
                 items-center
                 justify-between
-                text-[10px]
+                text-sm
                 font-medium
                 text-white/60
               "
@@ -1482,42 +1416,56 @@ function SaleEntry() {
 
             <div
               className="
-              mt-3
+              mt-2
               divide-y
               divide-[#ECEFEA]
               border
               border-[#E3E7E0]
               bg-[#FAFBF9]
+              
             "
             >
               <PaymentSummaryRow
                 label="Discounted Price"
                 value={netPayableBeforeVat}
+                strong
               />
 
               <PaymentSummaryRow
                 label="Discount Amount"
                 value={productDiscount + invoiceDiscountAmount}
+                strong
               />
 
-              <PaymentSummaryRow label="Total VAT" value={totalVat} />
+              <PaymentSummaryRow label="Total VAT" value={totalVat} strong />
 
               <PaymentSummaryRow
                 label="Total Received"
                 value={totalReceived}
-                strong
+                labelClassName="text-[#0136ff]"
+                valueClassName="text-[#0136ff]"
               />
 
-              <PaymentSummaryRow label="Change" value={change} positive />
+              <PaymentSummaryRow
+                label="Change"
+                value={change}
+                labelClassName="text-[#a90419]"
+                valueClassName="text-[#a90419]"
+              />
 
-              <PaymentSummaryRow label="Due" value={due} danger={due > 0} />
+              <PaymentSummaryRow
+                label="Due"
+                value={due}
+                labelClassName="text-[#fb0200]"
+                valueClassName="text-[#fb0200]"
+              />
             </div>
 
             {/* EXTRA FIELDS */}
 
             <div
               className="
-              mt-3
+              mt-2
               space-y-2
             "
             >
@@ -1549,16 +1497,16 @@ function SaleEntry() {
                     rounded-md
                     border
                     border-[#B8C4B4]
-                    bg-[#F8FAF6]
+                    bg-[#F1F8F3]
                     px-2.5
                     text-right
                     text-sm
                     font-semibold
-                    text-[#354536]
+                    text-[#10673E]
                     outline-none
-                    focus:border-[#596B4F]
+                    focus:border-[#0E9351]
                     focus:ring-2
-                    focus:ring-[#596B4F]/10
+                    focus:ring-[#0E9351]/15
                   "
                 />
               </CompactField>
@@ -1566,15 +1514,15 @@ function SaleEntry() {
 
             {/* PAYMENT METHODS */}
 
-            <div className="mt-3">
+            <div className="mt-2">
               <p
                 className="
                 mb-2
-                text-[10px]
+                text-sm
                 font-semibold
                 uppercase
                 tracking-wide
-                text-[#7A847C]
+                text-[#66736B]
               "
               >
                 Payment Method
@@ -1622,11 +1570,12 @@ function SaleEntry() {
 
           {/* COMPLETE SALE */}
 
-          <div
+          {/* <div
             className="
+            mt-auto
             shrink-0
             border-t
-            border-[#D9DED5]
+            border-[#DDE5DF]
             bg-white
             p-2.5
           "
@@ -1641,20 +1590,20 @@ function SaleEntry() {
                 justify-center
                 gap-2
                 rounded-md
-                bg-[#354536]
+                bg-[#0E9351]
                 text-sm
                 font-semibold
                 text-white
                 shadow-sm
                 transition
-                hover:bg-[#4E6048]
+                hover:bg-[#10673E]
                 active:scale-[0.99]
               "
             >
               <Save size={16} />
               Complete Sale
             </button>
-          </div>
+          </div> */}
         </aside>
       </div>
 
@@ -1724,9 +1673,9 @@ function Field({ label, icon, children }: FieldProps) {
         flex
         items-center
         gap-1
-        text-[10px]
+        text-sm
         font-semibold
-        text-[#687269]
+        text-[#66736B]
       "
       >
         {icon}
@@ -1760,9 +1709,9 @@ function CompactField({ label, children }: CompactFieldProps) {
     >
       <span
         className="
-        text-[10px]
+        text-sm
         font-medium
-        text-[#687269]
+        text-[#66736B]
       "
       >
         {label}
@@ -1798,7 +1747,7 @@ function MiniSummary({ label, value }: MiniSummaryProps) {
     >
       <span
         className="
-        text-[9px]
+        text-sm
         font-medium
         uppercase
         tracking-wide
@@ -1810,9 +1759,9 @@ function MiniSummary({ label, value }: MiniSummaryProps) {
 
       <span
         className="
-        text-[11px]
+        text-sm
         font-semibold
-        text-[#354536]
+        text-[#10673E]
       "
       >
         {value}
@@ -1830,6 +1779,8 @@ interface PaymentSummaryRowProps {
   value: number;
   strong?: boolean;
   positive?: boolean;
+  labelClassName?: string;
+  valueClassName?: string;
   danger?: boolean;
 }
 
@@ -1839,6 +1790,8 @@ function PaymentSummaryRow({
   strong = false,
   positive = false,
   danger = false,
+  valueClassName = "",
+  labelClassName = "",
 }: PaymentSummaryRowProps) {
   return (
     <div
@@ -1847,25 +1800,33 @@ function PaymentSummaryRow({
       items-center
       justify-between
       px-3
-      py-2
+      py-1.5
     "
     >
       <span
-        className="
-        text-[10px]
-        text-[#687269]
-      "
+        className={`
+        text-sm
+         ${strong ? "font-semibold" : "font-normal"}
+        ${labelClassName || "text-[#66736B]"}
+        `}
       >
         {label}
       </span>
 
       <span
         className={`
-          text-xs
+          text-sm
           ${strong ? "font-semibold" : "font-medium"}
-          ${positive ? "text-[#47734D]" : ""}
-          ${danger ? "text-[#B84A4A]" : ""}
-          ${!positive && !danger ? "text-[#263027]" : ""}
+         ${
+           valueClassName
+             ? valueClassName
+             : positive
+               ? "text-[#0E9351]"
+               : danger
+                 ? "text-[#B84A4A]"
+                 : "text-[#17231D]"
+         }
+          ${valueClassName}
         `}
       >
         {value.toFixed(2)}
@@ -1920,15 +1881,15 @@ function PaymentButton({ icon, text, onClick }: PaymentButtonProps) {
         gap-1
         rounded-md
         border
-        border-[#D5DBD2]
-        bg-[#F8FAF6]
+        border-[#DDE5DF]
+        bg-[#F1F8F3]
         px-1
-        text-[10px]
+        text-sm
         font-medium
-        text-[#354536]
+        text-[#10673E]
         transition
-        hover:border-[#596B4F]
-        hover:bg-[#E8EDE3]
+        hover:border-[#0E9351]
+        hover:bg-[#E8F5ED]
         active:scale-[0.98]
       "
     >

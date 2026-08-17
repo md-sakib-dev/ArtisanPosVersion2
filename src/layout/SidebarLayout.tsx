@@ -7,7 +7,7 @@ const SidebarLayout = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div className="h-dvh w-full overflow-hidden bg-[#F5F2EA]">
+    <div className="h-dvh w-full overflow-hidden bg-[#F5F7F3]">
 
       <Sidebar
         isCollapsed={isCollapsed}

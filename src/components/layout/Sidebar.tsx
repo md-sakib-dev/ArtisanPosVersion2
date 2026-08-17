@@ -21,7 +21,7 @@ function Sidebar({
         z-40
         h-screen
         overflow-y-auto
-        bg-[#8A9A5B]
+        sidebar-gloss
         text-white
         transition-all
         duration-300
@@ -46,7 +46,7 @@ function Sidebar({
           </span>
         ) : (
           <h1 className="text-2xl font-bold">
-            POS
+            WSTech POS
           </h1>
         )}
       </div>
