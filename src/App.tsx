@@ -3,7 +3,7 @@ import './App.css'
 import { BrowserRouter,Routes,Route } from 'react-router-dom'
 import SidebarLayout from './layout/SidebarLayout'
 import PosLayout from './layout/PosLayout'
-import Dashboard from './pages/Dashboard/Dashboard'
+import CeoDashboard from './pages/Dashboard/CeoDashboard'
 import SaleEntry from './pages/Sales/SaleEntry'
 import Stock from './pages/Products/Stock'
 import VoucherEntry from './pages/Sales/VoucherEntry'
@@ -24,7 +24,7 @@ return(
 
           <Route
             path="/"
-            element={<Dashboard />}
+            element={<CeoDashboard />}
           />
 
           <Route

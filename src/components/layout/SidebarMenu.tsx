@@ -59,7 +59,7 @@ function SidebarMenu({
             gap-3
             py-3
             rounded-lg
-            hover:bg-[#596B4F]
+            hover:bg-white/10
             transition-all
             duration-200
             ${isCollapsed
@@ -114,8 +114,8 @@ function SidebarMenu({
 
             ${
               isActive
-                ? "bg-[#596B4F] text-white"
-                : "hover:bg-[#596B4F]"
+                ? "bg-white text-[#354536]"
+                : "hover:bg-white/10"
             }
             `
           }
@@ -157,8 +157,8 @@ function SidebarMenu({
 
                   ${
                     isActive
-                      ? "bg-[#596B4F] text-white"
-                      : "text-gray-300 hover:bg-[#596B4F]"
+                      ? "bg-white text-[#354536]"
+                      : "text-white/75 hover:bg-white/10"
                   }
                   `
                 }
