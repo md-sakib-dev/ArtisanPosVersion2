@@ -1,8 +1,11 @@
 
 import './App.css'
-import { BrowserRouter,Routes,Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
 import SidebarLayout from './layout/SidebarLayout'
 import PosLayout from './layout/PosLayout'
+import Login from './pages/Auth/Login'
 import CeoDashboard from './pages/Dashboard/CeoDashboard'
 import SaleEntry from './pages/Sales/SaleEntry'
 import Stock from './pages/Products/Stock'
@@ -12,49 +15,57 @@ import FactoryReturn from './pages/Purchase/FactoryReturn'
 import GiftVoucherReceive from './pages/Sales/GiftVoucherReceive'
 import StockTransfer from './pages/Products/StockTransfer'
 import VoucherTransfer from './pages/Sales/VoucherTransfer'
+import SalesRefund from './pages/Sales/SalesRefund'
+import StockUpdate from './pages/Products/StockUpdate'
+import ProductManagement from './pages/Products/ProductManagement'
+
 function App() {
-
-return(
+  return (
+    <AuthProvider>
       <BrowserRouter>
+        <Routes>
+          {/* Login Page (Public) */}
+          <Route path="/login" element={<Login />} />
 
-      <Routes>
-
-        {/* Normal Application Layout */}
-        <Route element={<SidebarLayout />}>
-
+          {/* Normal Application Layout (Protected) */}
           <Route
-            path="/"
-            element={<CeoDashboard />}
-          />
+            element={
+              <ProtectedRoute>
+                <SidebarLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<CeoDashboard />} />
+            <Route path="/stock" element={<Stock />} />
+            <Route path="/voucherentry" element={<VoucherEntry />} />
+            <Route path="/productreceive" element={<ProductReceive />} />
+            <Route path="/factoryreturn" element={<FactoryReturn />} />
+            <Route path="/giftvoucherreceive" element={<GiftVoucherReceive />} />
+            <Route path="/stocktransfer" element={<StockTransfer />} />
+            <Route path="/vouchertransfer" element={<VoucherTransfer />} />
+            <Route path="/salesrefund" element={<SalesRefund />} />
+            <Route path="/stockupdate" element={<StockUpdate />} />
+            <Route path="/productmanagement" element={<ProductManagement />} />
+          </Route>
 
+          {/* POS Layout (Protected) */}
           <Route
-            path="/stock"
-            element={<Stock />}
-          />
-          <Route path='/voucherentry' element={<VoucherEntry/>}/>
-          <Route path='/productreceive' element={<ProductReceive/>}/>
-          <Route path='/factoryreturn' element={<FactoryReturn/>}/>
-          <Route path='/giftvoucherreceive' element={<GiftVoucherReceive/>}/>
-          <Route path='/stocktransfer' element={<StockTransfer/>}/>
-          <Route path='/vouchertransfer' element={<VoucherTransfer/>}/>
+            element={
+              <ProtectedRoute>
+                <PosLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/saleentry" element={<SaleEntry />} />
+          </Route>
 
-        </Route>
-
-
-        {/* POS Layout */}
-        <Route element={<PosLayout />}>
-
-          <Route
-            path="/saleentry"
-            element={<SaleEntry />}
-          />
-
-        </Route>
-
-      </Routes>
-
-    </BrowserRouter>
-)
+          {/* Catch-all redirect */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
 }
 
 export default App

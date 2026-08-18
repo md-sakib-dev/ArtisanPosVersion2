@@ -73,7 +73,7 @@ function SidebarMenu({
 
           {/* Label */}
           {!isCollapsed && (
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left text-sm">
               {item.label}
             </span>
           )}
@@ -125,7 +125,7 @@ function SidebarMenu({
 
           {/* Label */}
           {!isCollapsed && (
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left text-sm">
               {item.label}
             </span>
           )}

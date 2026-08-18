@@ -11,18 +11,24 @@ import {
   RotateCcw,
   Gift,
   ArrowLeftRight,
+  Boxes,
 } from "lucide-react";
 import type { MenuItem } from "../types/menu";
 export const menuItems: MenuItem[] = [
   {
     label: "Home",
     icon: LayoutDashboard,
-      path: "/",
+      path: "/dashboard",
   },
   {
     label: "Admin Home",
     icon: ShoppingCart,
       path: "/products",
+  },
+  {
+    label: "Product Management",
+    icon: Boxes,
+      path: "/productmanagement",
   },
   {
     label: "Purchase",
@@ -65,6 +71,11 @@ export const menuItems: MenuItem[] = [
           path: "/stock",
       },
       {
+        label: "Stock Update",
+        icon: PackageCheck,
+          path: "/stockupdate",
+      },
+      {
         label: "Stock Transfer",
         icon: Package,
           path: "/stocktransfer",
@@ -92,8 +103,8 @@ export const menuItems: MenuItem[] = [
       },
       {
         label: "Returns",
-        icon: Receipt,
-          path: "/products",
+        icon: RotateCcw,
+          path: "/salesrefund",
       },
       {
         label: "Voucher Entry",
