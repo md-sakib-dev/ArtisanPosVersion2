@@ -73,7 +73,7 @@ function SidebarMenu({
 
           {/* Label */}
           {!isCollapsed && (
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left text-sm">
               {item.label}
             </span>
           )}
@@ -114,7 +114,7 @@ function SidebarMenu({
 
             ${
               isActive
-                ? "bg-white text-[#354536]"
+                ? "bg-[#E8F5ED] text-[#10673E]"
                 : "hover:bg-white/10"
             }
             `
@@ -125,7 +125,7 @@ function SidebarMenu({
 
           {/* Label */}
           {!isCollapsed && (
-            <span className="flex-1 text-left">
+            <span className="flex-1 text-left text-sm">
               {item.label}
             </span>
           )}
@@ -157,8 +157,8 @@ function SidebarMenu({
 
                   ${
                     isActive
-                      ? "bg-white text-[#354536]"
-                      : "text-white/75 hover:bg-white/10"
+                      ? "bg-[#E8F5ED] text-[#10673E]"
+                      : "text-white/80 hover:bg-white/10"
                   }
                   `
                 }

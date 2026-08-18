@@ -70,17 +70,17 @@ const smallInputClass = `
   w-full
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-2.5
   text-xs
-  text-[#263027]
+  text-[#17231D]
   outline-none
   transition
   placeholder:text-[#9AA29C]
-  focus:border-[#596B4F]
+  focus:border-[#0E9351]
   focus:ring-2
-  focus:ring-[#596B4F]/10
+  focus:ring-[#0E9351]/15
 `;
 
 const readOnlyInputClass = `
@@ -93,7 +93,7 @@ const readOnlyInputClass = `
   px-2.5
   text-xs
   font-medium
-  text-[#687269]
+  text-[#66736B]
   outline-none
 `;
 
@@ -167,7 +167,7 @@ function Field({
         gap-1
         text-[10px]
         font-semibold
-        text-[#687269]
+        text-[#66736B]
       ">
 
         {icon}
@@ -424,8 +424,8 @@ function GiftVoucherReceive() {
       w-full
       flex-col
       overflow-hidden
-      bg-[#F4F1E8]
-      text-[#263027]
+      bg-[#F5F7F3]
+      text-[#17231D]
     ">
 
 
@@ -440,7 +440,7 @@ function GiftVoucherReceive() {
         items-center
         justify-between
         gap-2
-        bg-[#354536]
+        bg-[#10673E]
         px-[clamp(8px,1vw,16px)]
         py-2
         text-white
@@ -502,9 +502,9 @@ function GiftVoucherReceive() {
             px-3.5
             text-[10px]
             font-semibold
-            text-[#354536]
+            text-[#10673E]
             transition
-            hover:bg-[#E8EDE3]
+            hover:bg-[#E8F5ED]
             active:scale-[0.98]
           "
         >
@@ -522,7 +522,7 @@ function GiftVoucherReceive() {
       <section className="
         shrink-0
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         px-[clamp(8px,1vw,16px)]
         py-2.5
@@ -734,7 +734,7 @@ function GiftVoucherReceive() {
               className={`
                 ${readOnlyInputClass}
                 font-semibold
-                text-[#596B4F]
+                text-[#66736B]
               `}
             />
 
@@ -762,14 +762,14 @@ function GiftVoucherReceive() {
               justify-center
               gap-1.5
               rounded-md
-              bg-[#354536]
+              bg-[#0E9351]
               px-4
               text-xs
               font-semibold
               text-white
               shadow-sm
               transition
-              hover:bg-[#4E6048]
+              hover:bg-[#10673E]
               active:scale-[0.98]
             "
           >
@@ -794,7 +794,7 @@ function GiftVoucherReceive() {
         flex-col
         overflow-hidden
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
       ">
 
@@ -807,8 +807,8 @@ function GiftVoucherReceive() {
           items-center
           justify-between
           border-b
-          border-[#D9DED5]
-          bg-[#F8FAF6]
+          border-[#DDE5DF]
+          bg-[#F1F8F3]
           px-[clamp(8px,1vw,16px)]
         ">
 
@@ -820,25 +820,25 @@ function GiftVoucherReceive() {
 
             <Gift
               size={14}
-              className="text-[#354536]"
+              className="text-[#10673E]"
             />
 
             <span className="
               text-xs
               font-semibold
-              text-[#354536]
+              text-[#10673E]
             ">
               Voucher List
             </span>
 
             <span className="
               rounded-full
-              bg-[#E5EAE1]
+              bg-[#E8F5ED]
               px-2
               py-0.5
               text-[9px]
               font-semibold
-              text-[#596B4F]
+              text-[#66736B]
             ">
               {rows.length}
             </span>
@@ -847,7 +847,7 @@ function GiftVoucherReceive() {
 
           <span className="
             text-[10px]
-            text-[#7A847C]
+            text-[#66736B]
           ">
             {totalValue.toFixed(2)} BDT total
           </span>
@@ -874,7 +874,7 @@ function GiftVoucherReceive() {
               sticky
               top-0
               z-10
-              bg-[#354536]
+              bg-[#10673E]
               text-white
             ">
 
@@ -1013,7 +1013,7 @@ function GiftVoucherReceive() {
                       border-b
                       border-[#ECEFEA]
                       transition-colors
-                      hover:bg-[#F6F8F4]
+                      hover:bg-[#F1F8F3]
                     "
                   >
 
@@ -1033,7 +1033,7 @@ function GiftVoucherReceive() {
                       font-mono
                       text-[11px]
                       font-medium
-                      text-[#263027]
+                      text-[#17231D]
                     ">
                       {row.serial}
                     </td>
@@ -1041,7 +1041,7 @@ function GiftVoucherReceive() {
                     <td className="
                       px-3
                       py-2
-                      text-[#687269]
+                      text-[#66736B]
                     ">
                       {formatDate(row.validityDate)}
                     </td>
@@ -1052,7 +1052,7 @@ function GiftVoucherReceive() {
                       text-right
                       font-semibold
                       tabular-nums
-                      text-[#354536]
+                      text-[#10673E]
                     ">
                       {row.originalValue.toFixed(2)}
                     </td>
@@ -1067,12 +1067,12 @@ function GiftVoucherReceive() {
                         inline-flex
                         items-center
                         rounded-full
-                        bg-[#E5EAE1]
+                        bg-[#E8F5ED]
                         px-2
                         py-0.5
                         text-[9px]
                         font-semibold
-                        text-[#47734D]
+                        text-[#0E9351]
                       ">
                         {row.status}
                       </span>
@@ -1082,7 +1082,7 @@ function GiftVoucherReceive() {
                     <td className="
                       px-3
                       py-2
-                      text-[#667067]
+                      text-[#66736B]
                     ">
                       {row.addedBy}
                     </td>
@@ -1194,8 +1194,8 @@ function GiftVoucherReceive() {
           gap-2
           rounded-md
           border
-          border-[#D9DED5]
-          bg-[#354536]
+          border-[#DDE5DF]
+          bg-[#10673E]
           px-4
           py-2.5
           text-xs

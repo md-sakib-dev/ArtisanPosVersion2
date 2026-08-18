@@ -11,48 +11,37 @@ import {
   RotateCcw,
   Gift,
   ArrowLeftRight,
+  Tags,
+  //Boxes,
 } from "lucide-react";
 import type { MenuItem } from "../types/menu";
 export const menuItems: MenuItem[] = [
   {
-    label: "Home",
+    label: "Pos Dashboard",
     icon: LayoutDashboard,
-      path: "/",
+      path: "/dashboard",
   },
   {
-    label: "Admin Home",
+    label: "Report Dashboard",
     icon: ShoppingCart,
-      path: "/products",
+      path: "/reportdashboard",
   },
+  // {
+  //   label: "Product Management",
+  //   icon: Boxes,
+  //     path: "/productmanagement",
+  // },
   {
-    label: "Purchase",
+    label: "Administration",
     icon: Package,
      children: [
       {
-        label: "New Purchase",
+        label: "New User",
         icon: ShoppingCart,
-          path: "/products",
+          path: "/createuser",
       },
-      {
-        label: "Purchase History",
-        icon: Receipt,
-          path: "/products",
-      },
-      {
-        label: "Returns",
-        icon: Receipt,
-          path: "/products",
-      },
-      {
-        label: "Product Receive",
-        icon: PackageCheck,
-          path: "/productreceive",
-      },
-      {
-        label: "Factory Return",
-        icon: RotateCcw,
-          path: "/factoryreturn",
-      },
+     
+     
     ],
   },
   {
@@ -64,17 +53,47 @@ export const menuItems: MenuItem[] = [
         icon: Package,
           path: "/stock",
       },
+      // {
+      //   label: "Stock Update",
+      //   icon: PackageCheck,
+      //     path: "/stockupdate",
+      // },
       {
         label: "Stock Transfer",
         icon: Package,
           path: "/stocktransfer",
+      },
+       {
+        label: "Product Receive",
+        icon: PackageCheck,
+          path: "/productreceive",
+      },
+      {
+        label: "Factory Return",
+        icon: RotateCcw,
+          path: "/factoryreturn",
+      },
+       {
+        label: "Gift Voucher Receive",
+        icon: Gift,
+          path: "/giftvoucherreceive",
+      },
+      {
+        label: "Voucher Transfer",
+        icon: ArrowLeftRight,
+          path: "/vouchertransfer",
+      },
+      {
+        label: "Label Print",
+        icon: Tags,
+          path: "/labelprint",
       },
     ],
   },
   {
     label: "Customers",
     icon: Users,
-      path: "/products",
+      path: "/customers",
   },
   {
     label: "Sales",
@@ -85,57 +104,41 @@ export const menuItems: MenuItem[] = [
         icon: ShoppingCart,
           path: "/saleentry",
       },
-      {
-        label: "Sales History",
-        icon: Receipt,
-          path: "/products",
-      },
+     
       {
         label: "Returns",
-        icon: Receipt,
-          path: "/products",
+        icon: RotateCcw,
+          path: "/salesrefund",
       },
       {
-        label: "Voucher Entry",
+        label: "Gift Voucher Sale",
         icon: Receipt,
           path: "/voucherentry",
       },
+     
+    ],
+  },  
+  {
+    label: "Configuration",
+    icon: Settings,
+      children: [
       {
-        label: "Gift Voucher Receive",
-        icon: Gift,
-          path: "/giftvoucherreceive",
+        label: "Invoice Discounts",
+        icon: ShoppingCart,
+          path: "/products",
       },
       {
-        label: "Voucher Transfer",
-        icon: ArrowLeftRight,
-          path: "/vouchertransfer",
+        label: "Label Printing",
+        icon: ShoppingCart,
+          path: "/products",
       },
+      
     ],
   },
   {
     label: "Reports",
     icon: BarChart3,
-    children: [
-      {
-        label: "Sale Reports",
-        icon: ShoppingCart,
-          path: "/products",
-      },
-      {
-        label: "Purchase Reports",
-        icon: Receipt,
-          path: "/products",
-      },
-      {
-        label: "Stock Report",
-        icon: Receipt,
-          path: "/products",
-      },
-    ],
-  },
-  {
-    label: "Settings",
-    icon: Settings,
       path: "/products",
+   
   },
 ];

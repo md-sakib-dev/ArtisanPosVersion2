@@ -110,17 +110,17 @@ const smallInputClass = `
   w-full
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-2.5
   text-xs
-  text-[#263027]
+  text-[#17231D]
   outline-none
   transition
   placeholder:text-[#9AA29C]
-  focus:border-[#596B4F]
+  focus:border-[#0E9351]
   focus:ring-2
-  focus:ring-[#596B4F]/10
+  focus:ring-[#0E9351]/15
 `;
 
 const secondaryButtonClass = `
@@ -131,15 +131,15 @@ const secondaryButtonClass = `
   gap-1.5
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-3.5
   text-xs
   font-medium
-  text-[#354536]
+  text-[#10673E]
   transition
-  hover:border-[#596B4F]
-  hover:bg-[#F3F6F0]
+  hover:border-[#0E9351]
+  hover:bg-[#F1F8F3]
   active:scale-[0.98]
 `;
 
@@ -219,7 +219,7 @@ function Field({
         gap-1
         text-[10px]
         font-semibold
-        text-[#687269]
+        text-[#66736B]
       ">
 
         {icon}
@@ -258,7 +258,7 @@ function StatusBadge({
       font-semibold
       ${
         active
-          ? "bg-[#E5EAE1] text-[#47734D]"
+          ? "bg-[#E8F5ED] text-[#0E9351]"
           : "bg-[#FCECEC] text-[#B84A4A]"
       }
     `}>
@@ -333,7 +333,7 @@ function VoucherLookupModal({
           overflow-hidden
           rounded-xl
           border
-          border-[#D9DED5]
+          border-[#DDE5DF]
           bg-white
           shadow-2xl
         "
@@ -351,7 +351,7 @@ function VoucherLookupModal({
           justify-between
           border-b
           border-[#E6EAE3]
-          bg-[#F8FAF6]
+          bg-[#F1F8F3]
           px-4
           py-3
         ">
@@ -369,7 +369,7 @@ function VoucherLookupModal({
               items-center
               justify-center
               rounded-md
-              bg-[#354536]
+              bg-[#10673E]
               text-white
             ">
               <Search size={14} />
@@ -380,14 +380,14 @@ function VoucherLookupModal({
               <h2 className="
                 text-sm
                 font-semibold
-                text-[#263027]
+                text-[#17231D]
               ">
                 Voucher Lookup
               </h2>
 
               <p className="
                 text-[9px]
-                text-[#7A847C]
+                text-[#66736B]
               ">
                 {pool.length} vouchers available
               </p>
@@ -402,10 +402,10 @@ function VoucherLookupModal({
             className="
               rounded-md
               p-1.5
-              text-[#687269]
+              text-[#66736B]
               transition
-              hover:bg-[#F1F4EF]
-              hover:text-[#354536]
+              hover:bg-[#F1F8F3]
+              hover:text-[#10673E]
             "
           >
             <X size={18} />
@@ -475,7 +475,7 @@ function VoucherLookupModal({
               sticky
               top-0
               z-10
-              bg-[#354536]
+              bg-[#10673E]
               text-white
             ">
 
@@ -577,7 +577,7 @@ function VoucherLookupModal({
                         border-b
                         border-[#ECEFEA]
                         transition-colors
-                        hover:bg-[#F6F8F4]
+                        hover:bg-[#F1F8F3]
                       "
                     >
 
@@ -587,7 +587,7 @@ function VoucherLookupModal({
                         font-mono
                         text-[11px]
                         font-semibold
-                        text-[#263027]
+                        text-[#17231D]
                       ">
                         {voucher.serial}
                       </td>
@@ -598,7 +598,7 @@ function VoucherLookupModal({
                         text-right
                         font-semibold
                         tabular-nums
-                        text-[#354536]
+                        text-[#10673E]
                       ">
                         {voucher.value.toFixed(2)}
                       </td>
@@ -606,7 +606,7 @@ function VoucherLookupModal({
                       <td className="
                         px-3
                         py-2.5
-                        text-[#687269]
+                        text-[#66736B]
                       ">
                         {formatDate(voucher.expiry)}
                       </td>
@@ -640,13 +640,13 @@ function VoucherLookupModal({
                             justify-center
                             gap-1
                             rounded-md
-                            bg-[#354536]
+                            bg-[#0E9351]
                             px-2.5
                             text-[10px]
                             font-semibold
                             text-white
                             transition
-                            hover:bg-[#4E6048]
+                            hover:bg-[#10673E]
                             active:scale-[0.98]
                             disabled:cursor-not-allowed
                             disabled:bg-[#E3E7E0]
@@ -955,8 +955,8 @@ function VoucherTransfer() {
       w-full
       flex-col
       overflow-hidden
-      bg-[#F4F1E8]
-      text-[#263027]
+      bg-[#F5F7F3]
+      text-[#17231D]
     ">
 
       <style>{`
@@ -989,7 +989,7 @@ function VoucherTransfer() {
         justify-between
         gap-2
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         px-[clamp(8px,1vw,16px)]
         py-2
@@ -1009,7 +1009,7 @@ function VoucherTransfer() {
             items-center
             justify-center
             rounded-md
-            bg-[#354536]
+            bg-[#10673E]
             text-white
           ">
             <ArrowLeftRight size={16} />
@@ -1021,7 +1021,7 @@ function VoucherTransfer() {
               text-sm
               font-semibold
               leading-none
-              text-[#263027]
+              text-[#17231D]
             ">
               Voucher Transfer
             </h1>
@@ -1029,7 +1029,7 @@ function VoucherTransfer() {
             <p className="
               mt-0.5
               text-[9px]
-              text-[#7A847C]
+              text-[#66736B]
             ">
               Transfer vouchers between
               branches &amp; warehouses
@@ -1044,12 +1044,12 @@ function VoucherTransfer() {
           items-center
           gap-1.5
           rounded-full
-          bg-[#E5EAE1]
+          bg-[#E8F5ED]
           px-2.5
           py-1
           text-[9px]
           font-semibold
-          text-[#596B4F]
+          text-[#66736B]
           sm:inline-flex
         ">
           <Ticket size={11} />
@@ -1066,7 +1066,7 @@ function VoucherTransfer() {
       <section className="
         shrink-0
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         px-[clamp(8px,1vw,16px)]
         py-2.5
@@ -1159,13 +1159,13 @@ function VoucherTransfer() {
                 justify-center
                 gap-1
                 rounded-md
-                bg-[#354536]
+                bg-[#0E9351]
                 px-3
                 text-[10px]
                 font-semibold
                 text-white
                 transition
-                hover:bg-[#4E6048]
+                hover:bg-[#10673E]
                 active:scale-[0.98]
               "
             >
@@ -1186,15 +1186,15 @@ function VoucherTransfer() {
                 gap-1
                 rounded-md
                 border
-                border-[#D5DBD2]
+                border-[#DDE5DF]
                 bg-white
                 px-3
                 text-[10px]
                 font-semibold
-                text-[#354536]
+                text-[#10673E]
                 transition
-                hover:border-[#596B4F]
-                hover:bg-[#F3F6F0]
+                hover:border-[#0E9351]
+                hover:bg-[#F1F8F3]
                 active:scale-[0.98]
               "
             >
@@ -1221,7 +1221,7 @@ function VoucherTransfer() {
         flex-col
         overflow-hidden
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
       ">
 
@@ -1234,8 +1234,8 @@ function VoucherTransfer() {
           items-center
           justify-between
           border-b
-          border-[#D9DED5]
-          bg-[#F8FAF6]
+          border-[#DDE5DF]
+          bg-[#F1F8F3]
           px-[clamp(8px,1vw,16px)]
         ">
 
@@ -1247,25 +1247,25 @@ function VoucherTransfer() {
 
             <Ticket
               size={14}
-              className="text-[#354536]"
+              className="text-[#10673E]"
             />
 
             <span className="
               text-xs
               font-semibold
-              text-[#354536]
+              text-[#10673E]
             ">
               Staged Vouchers
             </span>
 
             <span className="
               rounded-full
-              bg-[#E5EAE1]
+              bg-[#E8F5ED]
               px-2
               py-0.5
               text-[9px]
               font-semibold
-              text-[#596B4F]
+              text-[#66736B]
             ">
               {rows.length}
             </span>
@@ -1274,7 +1274,7 @@ function VoucherTransfer() {
 
           <span className="
             text-[10px]
-            text-[#7A847C]
+            text-[#66736B]
           ">
             {totalValue.toFixed(2)} BDT total
           </span>
@@ -1301,7 +1301,7 @@ function VoucherTransfer() {
               sticky
               top-0
               z-10
-              bg-[#354536]
+              bg-[#10673E]
               text-white
             ">
 
@@ -1430,7 +1430,7 @@ function VoucherTransfer() {
                       border-b
                       border-[#ECEFEA]
                       transition-colors
-                      hover:bg-[#F6F8F4]
+                      hover:bg-[#F1F8F3]
                     "
                   >
 
@@ -1450,7 +1450,7 @@ function VoucherTransfer() {
                       font-mono
                       text-[11px]
                       font-medium
-                      text-[#263027]
+                      text-[#17231D]
                     ">
                       {row.serial}
                     </td>
@@ -1461,7 +1461,7 @@ function VoucherTransfer() {
                       text-right
                       font-semibold
                       tabular-nums
-                      text-[#354536]
+                      text-[#10673E]
                     ">
                       {row.value.toFixed(2)}
                     </td>
@@ -1469,7 +1469,7 @@ function VoucherTransfer() {
                     <td className="
                       px-3
                       py-2
-                      text-[#687269]
+                      text-[#66736B]
                     ">
                       {formatDate(row.expiry)}
                     </td>
@@ -1557,7 +1557,7 @@ function VoucherTransfer() {
             gap-1
             text-[10px]
             font-semibold
-            text-[#687269]
+            text-[#66736B]
           ">
             Remarks
           </label>
@@ -1575,18 +1575,18 @@ function VoucherTransfer() {
               resize-none
               rounded-md
               border
-              border-[#D5DBD2]
+              border-[#DDE5DF]
               bg-white
               px-2.5
               py-1.5
               text-xs
-              text-[#263027]
+              text-[#17231D]
               outline-none
               transition
               placeholder:text-[#9AA29C]
-              focus:border-[#596B4F]
+              focus:border-[#0E9351]
               focus:ring-2
-              focus:ring-[#596B4F]/10
+              focus:ring-[#0E9351]/15
             "
           />
 
@@ -1606,14 +1606,14 @@ function VoucherTransfer() {
             justify-center
             gap-2
             rounded-md
-            bg-[#354536]
+            bg-[#0E9351]
             px-7
             text-sm
             font-semibold
             text-white
             shadow-sm
             transition
-            hover:bg-[#4E6048]
+            hover:bg-[#10673E]
             active:scale-[0.99]
           "
         >
@@ -1656,8 +1656,8 @@ function VoucherTransfer() {
           gap-2
           rounded-md
           border
-          border-[#D9DED5]
-          bg-[#354536]
+          border-[#DDE5DF]
+          bg-[#10673E]
           px-4
           py-2.5
           text-xs

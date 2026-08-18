@@ -1,9 +1,15 @@
 import {
+  User,
+  ChevronDown,
   Menu,
   KeyRound,
   LogOut,
+  UserRound
 } from "lucide-react";
 import logo from "../../assets/abc.png"
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface HeaderProps {
   isCollapsed: boolean;
@@ -14,13 +20,28 @@ const Header = ({
   isCollapsed,
   setIsCollapsed,
 }: HeaderProps) => {
+const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+const { user, logout } = useAuth();
+const navigate = useNavigate();
+const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleChangePassword = () => {
     // Change password logic
   };
 
   const handleLogout = () => {
-    // Logout logic
+    logout();
+    navigate("/login");
   };
 
   return (
@@ -29,9 +50,9 @@ const Header = ({
         h-16
         w-full
         shrink-0
-        bg-[#F5F2EA]
+        bg-[#F2EEE4]
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         flex
         items-center
         justify-between
@@ -52,8 +73,8 @@ const Header = ({
             items-center
             justify-center
             rounded-lg
-            text-[#354536]
-            hover:bg-[#F5F2EA]
+            text-[#10673E]
+            hover:bg-[#E8F5ED]
             transition-colors
           "
           title="Toggle Sidebar"
@@ -73,58 +94,133 @@ const Header = ({
 
 
       {/* RIGHT SIDE */}
-      <div className="flex items-center gap-2">
+     <div className="relative" ref={menuRef}>
+  {/* User Button */}
+  <button
+    onClick={() => setIsUserMenuOpen((prev) => !prev)}
+    className="
+      flex
+      items-center
+      gap-2
+      rounded-lg
+      px-3
+      py-2
+      text-[#10673E]
+      hover:bg-[#E8F5ED]
+      transition-colors
+    "
+  >
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E8F5ED]">
+      <User size={17} />
+    </div>
 
-        {/* Change Password */}
-        <button
-          onClick={handleChangePassword}
-          className="
-            flex
-            items-center
-            gap-2
-            rounded-lg
-            px-3
-            py-2
-            text-sm
-            font-medium
-            text-[#354536]
-            hover:bg-[#F5F2EA]
-            transition-colors
-          "
-        >
-          <KeyRound size={17} />
+    <ChevronDown
+      size={15}
+      className={`transition-transform ${
+        isUserMenuOpen ? "rotate-180" : ""
+      }`}
+    />
+  </button>
 
-          <span>
-            Change Password
-          </span>
-        </button>
-
-
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="
-            flex
-            items-center
-            gap-2
-            rounded-lg
-            px-3
-            py-2
-            text-sm
-            font-medium
-            text-red-600
-            hover:bg-red-50
-            transition-colors
-          "
-        >
-          <LogOut size={17} />
-
-          <span>
-            Logout
-          </span>
-        </button>
-
+  {/* Dropdown */}
+  {isUserMenuOpen && (
+    <div
+      className="
+        absolute
+        right-0
+        top-full
+        z-50
+        mt-2
+        w-52
+        overflow-hidden
+        rounded-xl
+        border
+        border-[#DDE5DF]
+        bg-white
+        shadow-lg
+      "
+    >
+      {/* User Info */}
+      <div className="border-b border-[#DDE5DF] px-4 py-3">
+        <p className="text-sm font-semibold text-[#17231D]">
+          {user || "User"}
+        </p>
+        <p className="text-xs text-[#6B7280] capitalize">
+          Administrator
+        </p>
       </div>
+
+      {/* View My Info */}
+      <button
+        onClick={() => {
+          setIsUserMenuOpen(false);
+          // handleViewProfile();
+        }}
+        className="
+          flex
+          w-full
+          items-center
+          gap-3
+          px-4
+          py-2.5
+          text-sm
+          text-[#17231D]
+          hover:bg-[#F1F8F3]
+          transition-colors
+        "
+      >
+        <UserRound size={16} className="text-[#10673E]" />
+        <span>View My Info</span>
+      </button>
+
+      {/* Change Password */}
+      <button
+        onClick={() => {
+          setIsUserMenuOpen(false);
+          handleChangePassword();
+        }}
+        className="
+          flex
+          w-full
+          items-center
+          gap-3
+          px-4
+          py-2.5
+          text-sm
+          text-[#17231D]
+          hover:bg-[#F1F8F3]
+          transition-colors
+        "
+      >
+        <KeyRound size={16} className="text-[#10673E]" />
+        <span>Change Password</span>
+      </button>
+
+      {/* Logout */}
+      <button
+        onClick={() => {
+          setIsUserMenuOpen(false);
+          handleLogout();
+        }}
+        className="
+          flex
+          w-full
+          items-center
+          gap-3
+          px-4
+          py-2.5
+          text-sm
+          text-red-600
+          hover:bg-red-50
+          transition-colors
+        "
+      >
+        <LogOut size={16} />
+        <span>Logout</span>
+      </button>
+    </div>
+  )}
+</div>
 
     </header>
   );

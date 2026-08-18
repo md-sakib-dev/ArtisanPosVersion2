@@ -49,17 +49,17 @@ const smallInputClass = `
   w-full
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-2.5
   text-xs
-  text-[#263027]
+  text-[#17231D]
   outline-none
   transition
   placeholder:text-[#9AA29C]
-  focus:border-[#596B4F]
+  focus:border-[#0E9351]
   focus:ring-2
-  focus:ring-[#596B4F]/10
+  focus:ring-[#0E9351]/15
 `;
 
 const readOnlyInputClass = `
@@ -84,15 +84,15 @@ const secondaryButtonClass = `
   gap-1.5
   rounded-md
   border
-  border-[#D5DBD2]
+  border-[#DDE5DF]
   bg-white
   px-3
   text-xs
   font-medium
-  text-[#354536]
+  text-[#10673E]
   transition
-  hover:border-[#596B4F]
-  hover:bg-[#F3F6F0]
+  hover:border-[#0E9351]
+  hover:bg-[#F1F8F3]
   active:scale-[0.98]
 `;
 
@@ -103,13 +103,13 @@ const primaryButtonClass = `
   justify-center
   gap-1.5
   rounded-md
-  bg-[#354536]
+  bg-[#0E9351]
   px-4
   text-xs
   font-semibold
   text-white
   transition
-  hover:bg-[#4E6048]
+  hover:bg-[#10673E]
   active:scale-[0.98]
 `;
 
@@ -120,13 +120,13 @@ const addButtonClass = `
   justify-center
   gap-1.5
   rounded-md
-  bg-[#354536]
+  bg-[#0E9351]
   px-4
   text-xs
   font-semibold
   text-white
   transition
-  hover:bg-[#4E6048]
+  hover:bg-[#10673E]
   active:scale-[0.98]
 `;
 
@@ -180,7 +180,7 @@ function Field({
         gap-1
         text-[10px]
         font-semibold
-        text-[#687269]
+        text-[#66736B]
       ">
 
         {icon}
@@ -332,7 +332,7 @@ function VoucherTable({
             sticky
             top-0
             z-10
-            bg-[#354536]
+            bg-[#10673E]
             text-white
           ">
 
@@ -456,7 +456,7 @@ function VoucherTable({
                     border-b
                     border-[#ECEFEA]
                     transition-colors
-                    hover:bg-[#F6F8F4]
+                    hover:bg-[#F1F8F3]
                   "
                 >
 
@@ -476,7 +476,7 @@ function VoucherTable({
                       font-mono
                       text-[11px]
                       font-medium
-                      text-[#263027]
+                      text-[#17231D]
                     ">
                       {item.serial}
                     </span>
@@ -486,7 +486,7 @@ function VoucherTable({
                   <td className="
                     px-3
                     py-1.5
-                    text-[#687269]
+                    text-[#66736B]
                   ">
                     {formatDate(item.expireDate)}
                   </td>
@@ -514,11 +514,11 @@ function VoucherTable({
                           justify-center
                           rounded-md
                           border
-                          border-[#D5DBD2]
+                          border-[#DDE5DF]
                           bg-white
-                          text-[#354536]
+                          text-[#10673E]
                           transition
-                          hover:bg-[#F3F6F0]
+                          hover:bg-[#F1F8F3]
                           disabled:cursor-not-allowed
                           disabled:opacity-40
                         "
@@ -532,7 +532,7 @@ function VoucherTable({
                         text-xs
                         font-semibold
                         tabular-nums
-                        text-[#263027]
+                        text-[#17231D]
                       ">
                         {item.qty}
                       </span>
@@ -550,11 +550,11 @@ function VoucherTable({
                           justify-center
                           rounded-md
                           border
-                          border-[#D5DBD2]
+                          border-[#DDE5DF]
                           bg-white
-                          text-[#354536]
+                          text-[#10673E]
                           transition
-                          hover:bg-[#F3F6F0]
+                          hover:bg-[#F1F8F3]
                         "
                       >
                         <Plus size={12} />
@@ -571,7 +571,7 @@ function VoucherTable({
                     text-xs
                     font-semibold
                     tabular-nums
-                    text-[#263027]
+                    text-[#17231D]
                   ">
                     {(
                       item.qty * VOUCHER_DEFAULT_PRICE
@@ -638,7 +638,7 @@ function SidebarField({
         block
         text-[10px]
         font-semibold
-        text-[#687269]
+        text-[#66736B]
       ">
         {label}
       </label>
@@ -673,7 +673,7 @@ function CompactField({
       <span className="
         text-[10px]
         font-medium
-        text-[#687269]
+        text-[#66736B]
       ">
         {label}
       </span>
@@ -720,8 +720,8 @@ function MethodToggle({
         active:scale-[0.98]
         ${
           active
-            ? "border-[#354536] bg-[#354536] text-white"
-            : "border-[#D5DBD2] bg-[#F8FAF6] text-[#354536] hover:border-[#596B4F] hover:bg-[#E8EDE3]"
+            ? "border-[#0E9351] bg-[#0E9351] text-white"
+            : "border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] hover:border-[#0E9351] hover:bg-[#E8F5ED]"
         }
       `}
     >
@@ -778,7 +778,7 @@ function CheckoutSummary({
       flex-col
       overflow-hidden
       border
-      border-[#D9DED5]
+      border-[#DDE5DF]
       bg-white
     ">
 
@@ -794,7 +794,7 @@ function CheckoutSummary({
 
         <div className="
           rounded-md
-          bg-[#354536]
+          bg-[#10673E]
           px-3
           py-2.5
           text-white
@@ -900,7 +900,7 @@ function CheckoutSummary({
               value={totalDue.toFixed(2)}
               className={`
                 ${readOnlyInputClass}
-                text-[#354536]
+                text-[#10673E]
               `}
             />
 
@@ -1036,17 +1036,17 @@ function CheckoutSummary({
                   rounded-md
                   border
                   border-[#B8C4B4]
-                  bg-[#F8FAF6]
+                  bg-[#F1F8F3]
                   px-2.5
                   text-right
                   text-sm
                   font-semibold
                   tabular-nums
-                  text-[#354536]
+                  text-[#10673E]
                   outline-none
-                  focus:border-[#596B4F]
+                  focus:border-[#0E9351]
                   focus:ring-2
-                  focus:ring-[#596B4F]/10
+                  focus:ring-[#0E9351]/15
                 "
               />
 
@@ -1380,8 +1380,8 @@ function VoucherEntry() {
       w-full
       flex-col
       overflow-hidden
-      bg-[#F4F1E8]
-      text-[#263027]
+      bg-[#F5F7F3]
+      text-[#17231D]
     ">
 
 
@@ -1392,7 +1392,7 @@ function VoucherEntry() {
       <section className="
         shrink-0
         border-b
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         p-[clamp(6px,0.8vw,12px)]
       ">
@@ -1436,7 +1436,7 @@ function VoucherEntry() {
           flex-col
           overflow-hidden
           border
-          border-[#D9DED5]
+          border-[#DDE5DF]
           bg-white
         ">
 
@@ -1496,7 +1496,7 @@ function VoucherEntry() {
         justify-end
         gap-1.5
         border-t
-        border-[#D9DED5]
+        border-[#DDE5DF]
         bg-white
         p-[clamp(6px,0.8vw,12px)]
       ">
@@ -1550,8 +1550,8 @@ function VoucherEntry() {
           gap-2
           rounded-md
           border
-          border-[#D9DED5]
-          bg-[#354536]
+          border-[#DDE5DF]
+          bg-[#10673E]
           px-4
           py-2.5
           text-xs
