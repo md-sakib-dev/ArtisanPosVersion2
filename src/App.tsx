@@ -7,6 +7,7 @@ import SidebarLayout from './layout/SidebarLayout'
 import PosLayout from './layout/PosLayout'
 import Login from './pages/Auth/Login'
 import CeoDashboard from './pages/Dashboard/CeoDashboard'
+import PosDashboard from './pages/Dashboard/PosDashboard'
 import SaleEntry from './pages/Sales/SaleEntry'
 import Stock from './pages/Products/Stock'
 import VoucherEntry from './pages/Sales/VoucherEntry'
@@ -17,7 +18,10 @@ import StockTransfer from './pages/Products/StockTransfer'
 import VoucherTransfer from './pages/Sales/VoucherTransfer'
 import SalesRefund from './pages/Sales/SalesRefund'
 import StockUpdate from './pages/Products/StockUpdate'
+import CustomerEntry from './pages/Customers/CustomerEntry'
 import ProductManagement from './pages/Products/ProductManagement'
+import CreateUser from './pages/Admin/CreateUser'
+import LabelPrint from './pages/Products/LabelPrint'
 
 function App() {
   return (
@@ -36,7 +40,8 @@ function App() {
             }
           >
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<CeoDashboard />} />
+            <Route path="/dashboard" element={<PosDashboard />} />
+            <Route path="/reportdashboard" element={<CeoDashboard />} />
             <Route path="/stock" element={<Stock />} />
             <Route path="/voucherentry" element={<VoucherEntry />} />
             <Route path="/productreceive" element={<ProductReceive />} />
@@ -47,6 +52,9 @@ function App() {
             <Route path="/salesrefund" element={<SalesRefund />} />
             <Route path="/stockupdate" element={<StockUpdate />} />
             <Route path="/productmanagement" element={<ProductManagement />} />
+            <Route path="/customers" element={<CustomerEntry />} />
+            <Route path="/createuser" element={<CreateUser />} />
+            <Route path="/labelprint" element={<LabelPrint />} />
           </Route>
 
           {/* POS Layout (Protected) */}

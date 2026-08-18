@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import logo from '../../assets/logo.png';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -34,12 +35,13 @@ const Login = () => {
         <div className="bg-white rounded-xl shadow-md border border-[#E5E7EB] overflow-hidden">
           {/* Compact Header */}
           <div className="bg-[#10673E] px-6 py-6 text-center">
+           < img src={logo} alt="Logo" className="mx-auto w-full h-15 mb-2" />
             <h1 className="text-lg font-bold text-white tracking-tight">
               Wstech POS
             </h1>
-            <p className="text-[#D4E8DC] text-xs mt-1">
+            {/* <p className="text-[#D4E8DC] text-xs mt-1">
               Point of Sale System
-            </p>
+            </p> */}
           </div>
 
           {/* Form */}
@@ -55,7 +57,7 @@ const Login = () => {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="username"
                   className="
                     w-full
                     px-3
@@ -89,7 +91,7 @@ const Login = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••"
+                    placeholder="*****"
                     className="
                       w-full
                       px-3
