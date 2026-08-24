@@ -22,6 +22,7 @@ import CustomerEntry from './pages/Customers/CustomerEntry'
 import ProductManagement from './pages/Products/ProductManagement'
 import CreateUser from './pages/Admin/CreateUser'
 import LabelPrint from './pages/Products/LabelPrint'
+import ProductReport from './pages/Reports/ProductReport'
 
 function App() {
   return (
@@ -55,6 +56,8 @@ function App() {
             <Route path="/customers" element={<CustomerEntry />} />
             <Route path="/createuser" element={<CreateUser />} />
             <Route path="/labelprint" element={<LabelPrint />} />
+                <Route path="/prodreport" element={<ProductReport />} />
+           
           </Route>
 
           {/* POS Layout (Protected) */}
@@ -66,6 +69,7 @@ function App() {
             }
           >
             <Route path="/saleentry" element={<SaleEntry />} />
+          
           </Route>
 
           {/* Catch-all redirect */}

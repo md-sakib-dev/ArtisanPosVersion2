@@ -608,6 +608,13 @@ function SaleEntry() {
           gap-2
         "
         >
+          <div>
+          <Link to="/"><img
+          src={logo}
+          alt="Company Logo"
+          className="h-8 w-auto object-contain"
+        /></Link>
+        </div>
           <div
             className="
             flex
@@ -619,9 +626,9 @@ function SaleEntry() {
             bg-white/10
           "
           >
-            <Link to="/">
+            
               <ShoppingCart size={16} />
-            </Link>
+            
           </div>
 
           <div>
@@ -645,13 +652,7 @@ function SaleEntry() {
               Point of Sale
             </p>
           </div>
-          <div>
-          <img
-          src={logo}
-          alt="Company Logo"
-          className="h-8 w-auto object-contain"
-        />
-        </div>
+          
         </div>
         
 
@@ -1469,14 +1470,14 @@ function SaleEntry() {
               space-y-2
             "
             >
-              <CompactField label="Adjustment">
+              {/* <CompactField label="Adjustment">
                 <input
                   type="number"
                   value={adjustment}
                   onChange={(e) => setAdjustment(Number(e.target.value))}
                   className={smallInputClass}
                 />
-              </CompactField>
+              </CompactField> */}
 
               <CompactField label="Reference">
                 <input
