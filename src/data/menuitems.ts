@@ -17,7 +17,7 @@ import {
 import type { MenuItem } from "../types/menu";
 export const menuItems: MenuItem[] = [
   {
-    label: "Pos Dashboard",
+    label: "POS Dashboard",
     icon: LayoutDashboard,
       path: "/dashboard",
   },
@@ -138,7 +138,18 @@ export const menuItems: MenuItem[] = [
   {
     label: "Reports",
     icon: BarChart3,
-      path: "/products",
-   
+     children: [
+      {
+        label: "Product Report",
+        icon: ShoppingCart,
+          path: "/prodreport",
+      },
+      {
+        label: "Label Printing",
+        icon: ShoppingCart,
+          path: "/products",
+      },
+      
+    ],
   },
 ];

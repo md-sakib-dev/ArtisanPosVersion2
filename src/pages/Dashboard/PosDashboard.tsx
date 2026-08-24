@@ -372,7 +372,7 @@ export default function PosDashboard() {
             </div>
 
             {/* Stock bar */}
-            <div className="mt-4">
+            {/* <div className="mt-4">
               <div className="flex items-center justify-between text-[11.5px]">
                 <span className="text-[#6B7280]">Stock Health</span>
                 <span className="font-medium text-[#10673E]">82% healthy</span>
@@ -385,7 +385,7 @@ export default function PosDashboard() {
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#E2BA48]" /> Low</span>
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Out</span>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
 

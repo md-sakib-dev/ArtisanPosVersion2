@@ -1,0 +1,72 @@
+[
+  {
+    "productName": "BOYS EX.TROUSER",
+    "barcode": "0030111899",
+    "group": "BOYS",
+    "type": "EX.TROUSER",
+    "category": "-",
+    "style": "NA",
+    "brandName": "ARTISAN",
+    "size": "10-12Y",
+    "color": "NA",
+    "price": 795,
+    "vat": 7.5,
+    "productDescription": "BOYS EX.TROUSER ARTISAN 10-12Y - - NA - NA"
+  },
+  {
+    "productName": "BOYS EX.TROUSER",
+    "barcode": "0030111898",
+    "group": "BOYS",
+    "type": "EX.TROUSER",
+    "category": "",
+    "style": "NA",
+    "brandName": "ARTISAN",
+    "size": "10-12Y",
+    "color": "NA",
+    "price": 795,
+    "vat": 7.5,
+    "productDescription": "BOYS EX.TROUSER ARTISAN 10-12Y 118-17 - NA - NA"
+  },
+  {
+    "productName": "BOYS EX.TROUSER",
+    "barcode": "0030111897",
+    "group": "BOYS",
+    "type": "EX.TROUSER",
+    "category": "EX.TR",
+    "style": "NA",
+    "brandName": "ARTISAN",
+    "size": "10-12 Y",
+    "color": "CHECK",
+    "price": 795,
+    "vat": 7.5,
+    "productDescription": "BOYS EX.TROUSER ARTISAN 10-12 Y EX.TR - NA - CHECK"
+  },
+  {
+    "productName": "BOYS EX.TROUSER",
+    "barcode": "0030111896",
+    "group": "BOYS",
+    "type": "EX.TROUSER",
+    "category": "-",
+    "style": "NA",
+    "brandName": "ARTISAN",
+    "size": "10-12 Y",
+    "color": "CHECK",
+    "price": 795,
+    "vat": 7.5,
+    "productDescription": "BOYS EX.TROUSER ARTISAN 10-12 Y - - NA - CHECK"
+  },
+  {
+    "productName": "MEN'S EX.SHIRT",
+    "barcode": "0010084786",
+    "group": "MEN'S",
+    "type": "EX.SHIRT",
+    "category": "F/S",
+    "style": "REGULAR FIT",
+    "brandName": "ARTISAN",
+    "size": "17.5",
+    "color": "NA",
+    "price": 0,
+    "vat": 0,
+    "productDescription": "MEN'S EX.SHIRT ARTISAN 17.5 F/S - REGULAR FIT - NA"
+  }
+]
