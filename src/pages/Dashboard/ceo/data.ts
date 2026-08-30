@@ -47,7 +47,6 @@ export const PERIOD_OPTIONS: { key: PeriodFilter; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "week", label: "This Week" },
   { key: "month", label: "This Month" },
-  { key: "custom", label: "Custom Range" },
 ];
 
 export const SERIES: Record<PeriodFilter, SalesPoint[]> = {
@@ -88,22 +87,6 @@ export const SERIES: Record<PeriodFilter, SalesPoint[]> = {
     { label: "Jun", revenue: 2890000, units: 18600 },
     { label: "Jul", revenue: 3020000, units: 19400 },
     { label: "Aug", revenue: 3170000, units: 20300 },
-  ],
-  custom: [
-    { label: "3 Aug", revenue: 198000, units: 1340 },
-    { label: "4 Aug", revenue: 246000, units: 1620 },
-    { label: "5 Aug", revenue: 221000, units: 1470 },
-    { label: "6 Aug", revenue: 268000, units: 1750 },
-    { label: "7 Aug", revenue: 254000, units: 1660 },
-    { label: "8 Aug", revenue: 312000, units: 2010 },
-    { label: "9 Aug", revenue: 294000, units: 1890 },
-    { label: "10 Aug", revenue: 332000, units: 2150 },
-    { label: "11 Aug", revenue: 305000, units: 1990 },
-    { label: "12 Aug", revenue: 348000, units: 2240 },
-    { label: "13 Aug", revenue: 326000, units: 2110 },
-    { label: "14 Aug", revenue: 371000, units: 2380 },
-    { label: "15 Aug", revenue: 355000, units: 2290 },
-    { label: "16 Aug", revenue: 384000, units: 2460 },
   ],
 };
 
@@ -200,37 +183,6 @@ export const KPIS: Record<PeriodFilter, KpiSet> = {
       offline: 3,
       delta: 4.2,
       compare: "3 outlets offline",
-      spark: sparkOutlets,
-    },
-    stock: {
-      value: 1248500,
-      delta: -2.3,
-      lowStock: 23,
-      compare: "3 SKUs out of stock",
-      spark: sparkStock,
-    },
-  },
-  custom: {
-    revenue: {
-      value: 4162950,
-      delta: 7.6,
-      compare: "vs ৳38,68,400 previous range",
-      spark: sparkRevenue,
-    },
-    orders: {
-      value: 12904,
-      items: 34480,
-      delta: 5.9,
-      compare: "vs 12,184 previous range",
-      spark: sparkOrders,
-    },
-    outlets: {
-      active: 47,
-      total: 52,
-      online: 47,
-      offline: 5,
-      delta: 2.2,
-      compare: "5 outlets offline",
       spark: sparkOutlets,
     },
     stock: {
@@ -662,4 +614,171 @@ export const STORES = [
   "Uttara Branch",
   "Sylhet City Center",
   "Khulna Outlet",
-];
+] as const;
+
+/* ------------------------------------------------------------------ */
+/* Outlet-specific data generation                                     */
+/* ------------------------------------------------------------------ */
+
+/** Revenue share per outlet (used to scale aggregate data) */
+const OUTLET_SHARES: Record<string, number> = {
+  "All Stores": 1,
+  "Dhanmondi Flagship": 0.255,
+  "Gulshan 2 Store": 0.213,
+  "Chittagong EPZ": 0.187,
+  "Uttara Branch": 0.157,
+  "Sylhet City Center": 0.109,
+  "Khulna Outlet": 0.079,
+};
+
+/** Different product mix per outlet */
+const OUTLET_PRODUCT_INDEX: Record<string, number[]> = {
+  "All Stores": [0, 1, 2, 3, 4],
+  "Dhanmondi Flagship": [0, 1, 2, 3, 4],
+  "Gulshan 2 Store": [1, 0, 3, 2, 4],
+  "Chittagong EPZ": [2, 3, 0, 1, 4],
+  "Uttara Branch": [3, 2, 4, 0, 1],
+  "Sylhet City Center": [4, 3, 1, 2, 0],
+  "Khulna Outlet": [3, 4, 2, 0, 1],
+};
+
+/** Different category distribution per outlet */
+const OUTLET_CATEGORY_SHIFTS: Record<string, number[]> = {
+  "All Stores": [0, 0, 0, 0, 0],
+  "Dhanmondi Flagship": [3, -1, 4, -2, -4],
+  "Gulshan 2 Store": [-2, 4, 2, -1, -3],
+  "Chittagong EPZ": [1, 2, -3, 3, -3],
+  "Uttara Branch": [-3, -2, 1, 4, 0],
+  "Sylhet City Center": [0, -3, -2, 1, 4],
+  "Khulna Outlet": [-1, 1, -2, -1, 3],
+};
+
+/** Simple deterministic hash for consistent per-outlet variance */
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/** Get KPI set for a given period + outlet */
+export function getOutletKPIs(
+  period: PeriodFilter,
+  store: string,
+): KpiSet {
+  const base = KPIS[period];
+  if (store === "All Stores") return base;
+  const share = OUTLET_SHARES[store] ?? 1;
+  const h = hashStr(store + period);
+  return {
+    revenue: {
+      ...base.revenue,
+      value: Math.round(base.revenue.value * share),
+      delta: +((h % 5) - 1 + base.revenue.delta).toFixed(1),
+    },
+    orders: {
+      ...base.orders,
+      value: Math.round(base.orders.value * share),
+      items: Math.round(base.orders.items * share),
+      delta: +((h % 4) - 1 + base.orders.delta).toFixed(1),
+    },
+    outlets: {
+      ...base.outlets,
+      active: 1,
+      total: 1,
+      online: 1,
+      offline: 0,
+      delta: +((h % 3) - 1 + base.outlets.delta).toFixed(1),
+    },
+    stock: {
+      ...base.stock,
+      value: Math.round(base.stock.value * share),
+      lowStock: Math.max(1, Math.round(base.stock.lowStock * share)),
+    },
+  };
+}
+
+/** Get sales series for a given period + outlet */
+export function getOutletSeries(
+  period: PeriodFilter,
+  store: string,
+): SalesPoint[] {
+  const base = SERIES[period];
+  if (store === "All Stores") return base;
+  const share = OUTLET_SHARES[store] ?? 1;
+  // Use a deterministic seed from store name for per-outlet variance
+  const seed = store.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  return base.map((pt, i) => ({
+    label: pt.label,
+    revenue: Math.round(pt.revenue * share * (0.85 + ((seed + i * 7) % 30) / 100)),
+    units: Math.round(pt.units * share * (0.85 + ((seed + i * 13) % 30) / 100)),
+  }));
+}
+
+/** Get top products for a given outlet */
+export function getOutletProducts(store: string): TopProduct[] {
+  const indices = OUTLET_PRODUCT_INDEX[store] ?? OUTLET_PRODUCT_INDEX["All Stores"];
+  const share = OUTLET_SHARES[store] ?? 1;
+  return indices.map((idx) => {
+    const p = TOP_PRODUCTS[idx];
+    return {
+      ...p,
+      unitsSold: Math.round(p.unitsSold * share * (0.8 + (idx * 0.1))),
+      revenue: Math.round(p.revenue * share * (0.8 + (idx * 0.1))),
+    };
+  });
+}
+
+/** Get category distribution for a given outlet */
+export function getOutletCategories(store: string): CategorySlice[] {
+  const shifts = OUTLET_CATEGORY_SHIFTS[store] ?? OUTLET_CATEGORY_SHIFTS["All Stores"];
+  const share = OUTLET_SHARES[store] ?? 1;
+  return CATEGORIES.map((c, i) => {
+    const newVal = Math.max(5, Math.min(40, c.value + shifts[i]));
+    return {
+      ...c,
+      value: newVal,
+      amount: Math.round(c.amount * share * (newVal / c.value)),
+    };
+  });
+}
+
+/** Get monthly comparison for a given outlet */
+export function getOutletMonthlyComparison(store: string): ComparisonPoint[] {
+  const share = OUTLET_SHARES[store] ?? 1;
+  return MONTHLY_COMPARISON.map((d) => ({
+    label: d.label,
+    current: Math.round(d.current * share),
+    previous: Math.round(d.previous * share),
+  }));
+}
+
+/** Get outlet performance for a given outlet (or all) */
+export function getOutletPerformance(store: string): OutletRow[] {
+  if (store === "All Stores") return OUTLETS;
+  return OUTLETS.filter((o) => o.name === store);
+}
+
+/** Get monthly top outlets for a given outlet (or all) */
+export function getOutletMonthlyTop(store: string): OutletMonthly[] {
+  if (store === "All Stores") return TOP_OUTLETS_MONTHLY;
+  return TOP_OUTLETS_MONTHLY.filter((o) => o.name === store);
+}
+
+/** Get target data for a given outlet */
+export function getOutletTarget(store: string) {
+  if (store === "All Stores") return MONTHLY_TARGET;
+  const share = OUTLET_SHARES[store] ?? 1;
+  return {
+    target: Math.round(MONTHLY_TARGET.target * share),
+    achieved: Math.round(MONTHLY_TARGET.achieved * share),
+  };
+}
+
+/** Get payment data for a given outlet */
+export function getOutletPayments(store: string): PaymentSlice[] {
+  const share = OUTLET_SHARES[store] ?? 1;
+  return PAYMENTS.map((p) => ({
+    ...p,
+    amount: Math.round(p.amount * share),
+  }));
+}

@@ -1,6 +1,7 @@
-export type PeriodFilter = "today" | "week" | "month" | "custom";
+export type PeriodFilter = "today" | "week" | "month";
 export type RevenueMetric = "revenue" | "units";
 export type ProductSort = "revenue" | "volume";
+export type StoreName = "All Stores" | "Dhanmondi Flagship" | "Gulshan 2 Store" | "Chittagong EPZ" | "Uttara Branch" | "Sylhet City Center" | "Khulna Outlet";
 
 /** A single point on the sales trend chart */
 export interface SalesPoint {
