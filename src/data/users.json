@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "password": "admin123",
+    "displayName": "Admin User",
+    "roleId": 1,
+    "roleName": "Administrator"
+  },
+  {
+    "id": 2,
+    "username": "rafiq",
+    "password": "rafiq123",
+    "displayName": "Rafiqul Islam",
+    "roleId": 2,
+    "roleName": "Sales Manager"
+  },
+  {
+    "id": 3,
+    "username": "tanvir",
+    "password": "tanvir123",
+    "displayName": "Tanvir Hasan",
+    "roleId": 3,
+    "roleName": "Inventory Manager"
+  },
+  {
+    "id": 4,
+    "username": "farhan",
+    "password": "farhan123",
+    "displayName": "Farhan Ahmed",
+    "roleId": 4,
+    "roleName": "Sales User"
+  },
+  {
+    "id": 5,
+    "username": "nusrat",
+    "password": "nusrat123",
+    "displayName": "Nusrat Jahan",
+    "roleId": 5,
+    "roleName": "Report User"
+  }
+]

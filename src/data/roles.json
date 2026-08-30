@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "name": "Administrator",
+    "description": "Full system access with all permissions"
+  },
+  {
+    "id": 2,
+    "name": "Sales Manager",
+    "description": "Manages sales operations and views reports"
+  },
+  {
+    "id": 3,
+    "name": "Inventory Manager",
+    "description": "Manages stock and inventory operations"
+  },
+  {
+    "id": 4,
+    "name": "Sales User",
+    "description": "Basic sales operations only"
+  },
+  {
+    "id": 5,
+    "name": "Report User",
+    "description": "View-only access to reports and dashboards"
+  }
+]
