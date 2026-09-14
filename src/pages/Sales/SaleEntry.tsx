@@ -17,29 +17,29 @@ import {
   Receipt,
   Ticket,
   Wallet,
+  Gift,
   Trash2,
   Maximize2,
   Minimize2,
   X,
   ShoppingCart,
-  // UserRound,
+  UserRound,
 } from "lucide-react";
 import logo from "../../assets/logo.png"
-import { useState, type ReactNode } from "react";
+import { useState,  type ReactNode } from "react";
+import {getProductByBarcode} from "../../api/productApi";
 import { Link } from "react-router-dom";
+import type { MasterProduct } from "../../types/product";
+import CardPaymentModal from "../../components/CardPaymentModal";
+import MfsPaymentModal from "../../components/MfsPaymentModal";
+import SlipPaymentModal from "../../components/SlipPaymentModal";
+import VoucherPaymentModal from "../../components/VoucherPaymentModal";
+import CustomerInfoModal from "../../components/CustomerInfoModal";
 
 // ======================================================
 // TYPES
 // ======================================================
 
-interface MasterProduct {
-  id: number;
-  barcode: string;
-  prodName: string;
-  unitPrice: number;
-  disc: number;
-  vat: number;
-}
 
 interface CartProduct extends MasterProduct {
   qty: number;
@@ -50,40 +50,7 @@ interface CartProduct extends MasterProduct {
 // SAMPLE PRODUCTS
 // ======================================================
 
-const masterProducts: MasterProduct[] = [
-  {
-    id: 1,
-    barcode: "123456789123456",
-    prodName: "Sample Product",
-    unitPrice: 200,
-    disc: 5,
-    vat: 7.5,
-  },
-  {
-    id: 2,
-    barcode: "789012",
-    prodName: "Product Two",
-    unitPrice: 150,
-    disc: 0,
-    vat: 7.5,
-  },
-  {
-    id: 3,
-    barcode: "345678",
-    prodName: "Product Three",
-    unitPrice: 500,
-    disc: 0,
-    vat: 7.5,
-  },
-  {
-    id: 4,
-    barcode: "123455",
-    prodName: "Sample Product 2",
-    unitPrice: 200,
-    disc: 10,
-    vat: 7.5,
-  },
-];
+
 
 // ======================================================
 // REUSABLE STYLES
@@ -351,7 +318,6 @@ function SaleEntry() {
   // ====================================================
   // PRODUCT INPUT
   // ====================================================
-
   const [barcodeInput, setBarcodeInput] = useState("");
 
   const [spCodeInput, setSpCodeInput] = useState("");
@@ -385,14 +351,11 @@ function SaleEntry() {
   // ====================================================
 
   const [cashReceived, setCashReceived] = useState<number>(0);
+  const [refundType, setRefundType] = useState<string>("Cash");
 
-  const [cardAmount, setCardAmount] = useState<number>(0);
+  const [isCardPaymentModalOpen, setIsCardPaymentModalOpen] = useState(false);
 
-  const [mfsAmount, setMfsAmount] = useState<number>(0);
 
-  const [slipAmount, setSlipAmount] = useState<number>(0);
-
-  const [voucherAmount, setVoucherAmount] = useState<number>(0);
 
   const [walletAmount, setWalletAmount] = useState<number>(0);
 
@@ -400,15 +363,30 @@ function SaleEntry() {
   // PAYMENT MODALS
   // ====================================================
 
-  const [isCardOpen, setIsCardOpen] = useState(false);
+  const [cardPaymentTotal, setCardPaymentTotal] = useState<number>(0);
 
-  const [isMfsOpen, setIsMfsOpen] = useState(false);
+  const [isMfsPaymentModalOpen, setIsMfsPaymentModalOpen] = useState(false);
+  const [mfsTotal, setMfsTotal] = useState<number>(0);
 
-  const [isSlipOpen, setIsSlipOpen] = useState(false);
+  const [isSlipPaymentModalOpen, setIsSlipPaymentModalOpen] = useState(false);
+  const [slipTotal, setSlipTotal] = useState<number>(0);
 
-  const [isVoucherOpen, setIsVoucherOpen] = useState(false);
+  const [isVoucherPaymentModalOpen, setIsVoucherPaymentModalOpen] = useState(false);
+  const [voucherTotal, setVoucherTotal] = useState<number>(0);
 
   const [isWalletOpen, setIsWalletOpen] = useState(false);
+
+  const [isCustomerInfoOpen, setIsCustomerInfoOpen] = useState(false);
+
+  // ====================================================
+  // DELETE AUTHORIZATION
+  // ====================================================
+
+  const DELETE_PASSWORD = "1234";
+  const [deleteAuthOpen, setDeleteAuthOpen] = useState(false);
+  const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState(false);
 
   // ====================================================
   // FULLSCREEN
@@ -420,20 +398,93 @@ function SaleEntry() {
   // ADD PRODUCT
   // ====================================================
 
-  const handleAddProduct = () => {
-    const foundProduct = masterProducts.find(
-      (product) => product.barcode === barcodeInput.trim(),
-    );
+  // useEffect(() => {
+  //   const fetchProducts = async () => {
+  //     try {
+  //       const products = await getProducts();
+  //       setMasterProducts(products);
+  //     } catch (error) {
+  //       console.error("Error fetching products:", error);
+  //     }
+  //   };
+
+  //   fetchProducts();
+  // }, []);
+
+  // const handleAddProduct = () => {
+  //   const foundProduct = masterProducts.find(
+  //     (product) => product.barcode === barcodeInput.trim(),
+  //   );
+
+  //   if (!foundProduct) {
+  //     alert("Product not found");
+  //     return;
+  //   }
+
+  //   const quantity = Number(qtyInput);
+
+  //   if (quantity <= 0) {
+  //     alert("Quantity must be greater than 0");
+  //     return;
+  //   }
+
+  //   setProducts((previousProducts) => {
+  //     const existingIndex = previousProducts.findIndex(
+  //       (product) => product.barcode === foundProduct.barcode,
+  //     );
+
+  //     if (existingIndex !== -1) {
+  //       const updatedProducts = [...previousProducts];
+
+  //       const existingProduct = updatedProducts[existingIndex];
+
+  //       updatedProducts[existingIndex] = {
+  //         ...existingProduct,
+  //         qty: existingProduct.qty + quantity,
+  //         spCode: spCodeInput || existingProduct.spCode,
+  //       };
+
+  //       return updatedProducts;
+  //     }
+
+  //     return [
+  //       ...previousProducts,
+  //       {
+  //         ...foundProduct,
+  //         qty: quantity,
+  //         spCode: spCodeInput,
+  //       },
+  //     ];
+  //   });
+
+  //   setBarcodeInput("");
+  //   setSpCodeInput("");
+  //   setQtyInput(1);
+  // };
+
+  // ====================================================
+  // DELETE PRODUCT
+  // ====================================================
+const handleAddProduct = async () => {
+  const barcode = barcodeInput.trim();
+
+  if (!barcode) {
+    alert("Please enter a barcode");
+    return;
+  }
+
+  const quantity = Number(qtyInput);
+
+  if (quantity <= 0) {
+    alert("Quantity must be greater than 0");
+    return;
+  }
+
+  try {
+    const foundProduct = await getProductByBarcode(barcode);
 
     if (!foundProduct) {
       alert("Product not found");
-      return;
-    }
-
-    const quantity = Number(qtyInput);
-
-    if (quantity <= 0) {
-      alert("Quantity must be greater than 0");
       return;
     }
 
@@ -469,16 +520,46 @@ function SaleEntry() {
     setBarcodeInput("");
     setSpCodeInput("");
     setQtyInput(1);
+
+  } catch (error) {
+    console.error("Error fetching product:", error);
+    alert("Unable to retrieve product");
+  }
+};
+
+
+  const handleDeleteClick = (id: number) => {
+    setDeleteProductId(id);
+    setDeletePassword("");
+    setDeleteError(false);
+    setDeleteAuthOpen(true);
   };
 
-  // ====================================================
-  // DELETE PRODUCT
-  // ====================================================
+  const handleDeleteConfirm = () => {
+    if (deletePassword === DELETE_PASSWORD && deleteProductId !== null) {
+      setProducts((previousProducts) =>
+        previousProducts
+          .map((product) =>
+            product.id === deleteProductId
+              ? { ...product, qty: product.qty - 1 }
+              : product,
+          )
+          .filter((product) => product.qty > 0),
+      );
+      setDeleteAuthOpen(false);
+      setDeleteProductId(null);
+      setDeletePassword("");
+      setDeleteError(false);
+    } else {
+      setDeleteError(true);
+    }
+  };
 
-  const handleDeleteProduct = (id: number) => {
-    setProducts((previousProducts) =>
-      previousProducts.filter((product) => product.id !== id),
-    );
+  const handleDeleteCancel = () => {
+    setDeleteAuthOpen(false);
+    setDeleteProductId(null);
+    setDeletePassword("");
+    setDeleteError(false);
   };
 
   // ====================================================
@@ -530,10 +611,10 @@ function SaleEntry() {
 
   const totalReceived =
     Number(cashReceived) +
-    Number(cardAmount) +
-    Number(mfsAmount) +
-    Number(slipAmount) +
-    Number(voucherAmount) +
+    Number(cardPaymentTotal) +
+    Number(mfsTotal) +
+    Number(slipTotal) +
+    Number(voucherTotal) +
     Number(walletAmount);
 
   const change =
@@ -576,13 +657,14 @@ function SaleEntry() {
       flex
       h-full
       w-full
-      flex-col
       overflow-hidden
       bg-[#F5F7F3]
       p-2
       text-[#17231D]
     "
     >
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+
       {/* ================================================= */}
       {/* POS HEADER */}
       {/* ================================================= */}
@@ -687,7 +769,8 @@ function SaleEntry() {
             {isFullScreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
         </div>
-      </header>
+
+        </header>
 
       {/* ================================================= */}
       {/* MAIN AREA — INPUT + TABLE (left) | PAYMENT (right) */}
@@ -699,21 +782,11 @@ function SaleEntry() {
         flex
         min-h-0
         flex-1
-        gap-2
+        flex-col
         overflow-hidden
       "
       >
         {/* LEFT COLUMN: TOP INPUT + PRODUCT TABLE */}
-
-        <div
-          className="
-          flex
-          min-w-0
-          flex-1
-          flex-col
-          gap-2
-        "
-        >
           {/* TOP INPUT AREA */}
 
           <section
@@ -826,12 +899,22 @@ function SaleEntry() {
                 {/* Customer Phone */}
                 <div className="flex-[1.3]">
                   <Field label="Customer Phone" icon={<Phone size={13} />}>
-                    <input
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className={smallInputClass}
-                      placeholder="Phone number"
-                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="h-8 min-w-0 flex-1 rounded-md border border-[#DDE5DF] bg-white px-2.5 text-sm text-[#17231D] outline-none placeholder:text-[#9AA29C] focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
+                        placeholder="Phone number"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerInfoOpen(true)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] transition-all hover:border-[#0E9351] hover:bg-[#E8F5ED]"
+                        title="Customer Info"
+                      >
+                        <UserRound size={14} />
+                      </button>
+                    </div>
                   </Field>
                 </div>
 
@@ -849,7 +932,7 @@ function SaleEntry() {
 
                 {/* Invoice Discount */}
                 <div className="flex-1">
-                  <Field label="Invoice Discount" icon={<Percent size={13} />}>
+                  <Field label=" Discount" icon={<Percent size={13} />}>
                     <select
                       value={invoiceDiscount}
                       onChange={(e) =>
@@ -1241,7 +1324,7 @@ function SaleEntry() {
                             >
                               <button
                                 type="button"
-                                onClick={() => handleDeleteProduct(product.id)}
+                                onClick={() => handleDeleteClick(product.id)}
                                 className="
                                 inline-flex
                                 h-7
@@ -1306,6 +1389,11 @@ function SaleEntry() {
               <ActionButton icon={<FileText size={13} />} text="Reprint" />
 
               <ActionButton
+                icon={<Gift size={13} />}
+                text="Gift Bill"
+              />
+
+              <ActionButton
                 icon={<ArrowLeftRight size={13} />}
                 text="Exchange"
               />
@@ -1322,25 +1410,65 @@ function SaleEntry() {
             </div>
           </section>
 
-          {/* ================================================= */}
-          {/* PAYMENT PANEL */}
-          {/* ================================================= */}
-        </div>
+      </div>
 
-        <aside
+      </div>
+
+      <aside
           className="
+            ml-2.5
             flex
-            w-[22%]
-            min-w-[285px]
-            max-w-[370px]
+            w-[300px]
             shrink-0
             flex-col
             overflow-hidden
+            rounded-xl
             border
             border-[#DDE5DF]
             bg-white
+            shadow-sm
           "
         >
+          {/* TOTAL PAYABLE */}
+          <div
+            className="
+            shrink-0
+            rounded-t-xl
+            bg-[#10673E]
+            px-3
+            py-2.5
+            text-white
+            shadow-md
+          "
+          >
+            <div
+              className="
+              flex
+              items-center
+              justify-between
+              text-[11px]
+              font-semibold
+              uppercase
+              tracking-wide
+              text-white/60
+            "
+            >
+              <span>TOTAL PAYABLE</span>
+              <span>BDT</span>
+            </div>
+            <div
+              className="
+              mt-0.5
+              text-right
+              text-xl
+              font-bold
+              tracking-tight
+            "
+            >
+              {netPayable.toFixed(2)}
+            </div>
+          </div>
+
           {/* PAYMENT HEADER */}
 
           {/* <div
@@ -1371,61 +1499,26 @@ function SaleEntry() {
 
           <div
             className="
-            p-2.5
+            p-3 space-y-3
           "
           >
-            {/* TOTAL PAYABLE */}
-
-            <div
-              className="
-              rounded-lg
-              bg-[#10673E]
-              px-3
-              py-2.5
-              text-white
-            "
-            >
-              <div
-                className="
-                flex
-                items-center
-                justify-between
-                text-sm
-                font-medium
-                text-white/60
-              "
-              >
-                <span>TOTAL PAYABLE</span>
-
-                <span>BDT</span>
-              </div>
-
-              <div
-                className="
-                mt-1
-                text-right
-                text-3xl
-                font-bold
-                tracking-tight
-              "
-              >
-                {netPayable.toFixed(2)}
-              </div>
-            </div>
-
             {/* SUMMARY */}
 
             <div
               className="
-              mt-2
               divide-y
               divide-[#ECEFEA]
+              rounded-lg
               border
               border-[#E3E7E0]
               bg-[#FAFBF9]
-              
             "
             >
+              <PaymentSummaryRow
+                label="Total Price"
+                value={grossTotal}
+                strong
+              />
               <PaymentSummaryRow
                 label="Discounted Price"
                 value={netPayableBeforeVat}
@@ -1439,6 +1532,36 @@ function SaleEntry() {
               />
 
               <PaymentSummaryRow label="Total VAT" value={totalVat} strong />
+
+              {/* Refund Type & CS No */}
+              <div className="px-3 py-1.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[#66736B]">
+                      Refund Type
+                    </label>
+                    <select
+                      value={refundType}
+                      onChange={(e) => setRefundType(e.target.value)}
+                      className="h-8 w-full rounded-md border border-[#DDE5DF] bg-white px-2 text-sm outline-none focus:border-[#0E9351]"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Slip">Slip</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[#66736B]">
+                      CS No
+                    </label>
+                    <input
+                      type="text"
+                      disabled={refundType !== "Slip"}
+                      className="h-8 w-full rounded-md border border-[#DDE5DF] bg-white px-2 text-sm outline-none focus:border-[#0E9351] disabled:cursor-not-allowed disabled:bg-[#F3F4F2] disabled:text-gray-400"
+                      placeholder={refundType === "Slip" ? "CS No" : "Select Slip first"}
+                    />
+                  </div>
+                </div>
+              </div>
 
               <PaymentSummaryRow
                 label="Total Received"
@@ -1466,8 +1589,7 @@ function SaleEntry() {
 
             <div
               className="
-              mt-2
-              space-y-2
+              space-y-2.5
             "
             >
               {/* <CompactField label="Adjustment">
@@ -1479,7 +1601,7 @@ function SaleEntry() {
                 />
               </CompactField> */}
 
-              <CompactField label="Reference">
+              <CompactField label="Remarks">
                 <input
                   type="text"
                   className={smallInputClass}
@@ -1487,7 +1609,7 @@ function SaleEntry() {
                 />
               </CompactField>
 
-              <CompactField label="Cash Received">
+              <CompactField label="Cash">
                 <input
                   type="number"
                   value={cashReceived}
@@ -1515,11 +1637,11 @@ function SaleEntry() {
 
             {/* PAYMENT METHODS */}
 
-            <div className="mt-2">
+            <div>
               <p
                 className="
-                mb-2
-                text-sm
+                mb-2.5
+                text-xs
                 font-semibold
                 uppercase
                 tracking-wide
@@ -1533,31 +1655,31 @@ function SaleEntry() {
                 className="
                 grid
                 grid-cols-3
-                gap-1.5
+                gap-2
               "
               >
                 <PaymentButton
                   icon={<CreditCard size={14} />}
                   text="Card"
-                  onClick={() => setIsCardOpen(true)}
+                  onClick={() => setIsCardPaymentModalOpen(true)}
                 />
 
                 <PaymentButton
                   icon={<Smartphone size={14} />}
                   text="MFS"
-                  onClick={() => setIsMfsOpen(true)}
+                  onClick={() => setIsMfsPaymentModalOpen(true)}
                 />
 
                 <PaymentButton
                   icon={<Receipt size={14} />}
                   text="Slip"
-                  onClick={() => setIsSlipOpen(true)}
+                  onClick={() => setIsSlipPaymentModalOpen(true)}
                 />
 
                 <PaymentButton
                   icon={<Ticket size={14} />}
                   text="Voucher"
-                  onClick={() => setIsVoucherOpen(true)}
+                  onClick={() => setIsVoucherPaymentModalOpen(true)}
                 />
 
                 <PaymentButton
@@ -1565,6 +1687,34 @@ function SaleEntry() {
                   text="Wallet"
                   onClick={() => setIsWalletOpen(true)}
                 />
+
+                <label className="
+                  flex
+                  h-9
+                  items-center
+                  justify-center
+                  gap-1.5
+                  rounded-md
+                  border
+                  border-[#DDE5DF]
+                  bg-[#F1F8F3]
+                  px-1
+                  text-sm
+                  font-medium
+                  text-[#10673E]
+                  cursor-pointer
+                  transition
+                  hover:border-[#0E9351]
+                  hover:bg-[#E8F5ED]
+                "
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-[#0E9351]"
+                  />
+                  <Gift size={14} />
+                  Gift
+                </label>
               </div>
             </div>
           </div>
@@ -1606,42 +1756,33 @@ function SaleEntry() {
             </button>
           </div> */}
         </aside>
-      </div>
 
       {/* ================================================= */}
       {/* MODALS */}
       {/* ================================================= */}
 
-      <PaymentModal
-        open={isCardOpen}
-        title="Card Payment"
-        amount={cardAmount}
-        setAmount={setCardAmount}
-        onClose={() => setIsCardOpen(false)}
+      <CardPaymentModal
+        open={isCardPaymentModalOpen}
+        onClose={() => setIsCardPaymentModalOpen(false)}
+        onCardTotalChange={setCardPaymentTotal}
       />
 
-      <PaymentModal
-        open={isMfsOpen}
-        title="MFS Payment"
-        amount={mfsAmount}
-        setAmount={setMfsAmount}
-        onClose={() => setIsMfsOpen(false)}
+      <MfsPaymentModal
+        open={isMfsPaymentModalOpen}
+        onClose={() => setIsMfsPaymentModalOpen(false)}
+        onMfsTotalChange={setMfsTotal}
       />
 
-      <PaymentModal
-        open={isSlipOpen}
-        title="Slip Payment"
-        amount={slipAmount}
-        setAmount={setSlipAmount}
-        onClose={() => setIsSlipOpen(false)}
+      <SlipPaymentModal
+        open={isSlipPaymentModalOpen}
+        onClose={() => setIsSlipPaymentModalOpen(false)}
+        onSlipTotalChange={setSlipTotal}
       />
 
-      <PaymentModal
-        open={isVoucherOpen}
-        title="Voucher Payment"
-        amount={voucherAmount}
-        setAmount={setVoucherAmount}
-        onClose={() => setIsVoucherOpen(false)}
+      <VoucherPaymentModal
+        open={isVoucherPaymentModalOpen}
+        onClose={() => setIsVoucherPaymentModalOpen(false)}
+        onVoucherTotalChange={setVoucherTotal}
       />
 
       <PaymentModal
@@ -1651,6 +1792,192 @@ function SaleEntry() {
         setAmount={setWalletAmount}
         onClose={() => setIsWalletOpen(false)}
       />
+
+      <CustomerInfoModal
+        open={isCustomerInfoOpen}
+        onClose={() => setIsCustomerInfoOpen(false)}
+      />
+
+      {/* ================================================= */}
+      {/* DELETE AUTHORIZATION MODAL */}
+      {/* ================================================= */}
+
+      {deleteAuthOpen && (
+        <div
+          className="
+          fixed
+          inset-0
+          z-50
+          flex
+          items-center
+          justify-center
+          bg-black/40
+          p-4
+          backdrop-blur-[2px]
+        "
+        >
+          <div
+            className="
+            w-full
+            max-w-sm
+            overflow-hidden
+            rounded-xl
+            border
+            border-[#DDE5DF]
+            bg-white
+            shadow-2xl
+          "
+          >
+            <div
+              className="
+              flex
+              items-center
+              justify-between
+              border-b
+              border-[#E6EAE3]
+              px-5
+              py-4
+            "
+            >
+              <div>
+                <p
+                  className="
+                  text-sm
+                  font-semibold
+                  uppercase
+                  tracking-wider
+                  text-[#66736B]
+                "
+                >
+                  Authorization Required
+                </p>
+
+                <h2
+                  className="
+                  mt-0.5
+                  text-lg
+                  font-semibold
+                  text-[#17231D]
+                "
+                >
+                  Delete Product
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDeleteCancel}
+                className="
+                  rounded-md
+                  p-1.5
+                  text-[#66736B]
+                  transition
+                  hover:bg-[#F1F8F3]
+                  hover:text-[#10673E]
+                "
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <label
+                className="
+                mb-2
+                block
+                text-sm
+                font-medium
+                text-[#66736B]
+              "
+              >
+                Enter password to confirm deletion
+              </label>
+
+              <input
+                autoFocus
+                type="password"
+                value={deletePassword}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleDeleteConfirm();
+                }}
+                onChange={(e) => {
+                  setDeletePassword(e.target.value);
+                  setDeleteError(false);
+                }}
+                className="
+                  h-11
+                  w-full
+                  rounded-md
+                  border
+                  border-[#DDE5DF]
+                  px-3
+                  text-lg
+                  font-semibold
+                  text-[#17231D]
+                  outline-none
+                  focus:border-[#0E9351]
+                  focus:ring-2
+                  focus:ring-[#0E9351]/15
+                "
+              />
+
+              {deleteError && (
+                <p
+                  className="
+                  mt-2
+                  text-sm
+                  font-medium
+                  text-[#B84A4A]
+                "
+                >
+                  Incorrect password. Please try again.
+                </p>
+              )}
+
+              <div
+                className="
+                mt-5
+                flex
+                justify-end
+                gap-2
+              "
+              >
+                <button
+                  type="button"
+                  onClick={handleDeleteCancel}
+                  className={secondaryButtonClass}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  className="
+                    inline-flex
+                    h-9
+                    items-center
+                    justify-center
+                    gap-1.5
+                    rounded-md
+                    bg-[#B84A4A]
+                    px-4
+                    text-sm
+                    font-semibold
+                    text-white
+                    transition
+                    hover:bg-[#963838]
+                    active:scale-[0.98]
+                  "
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -53,9 +53,9 @@ type Toast =
 // ======================================================
 
 const refundTypeOptions = [
-  "Cash Refund",
-  "Credit Note",
-  "Exchange",
+  "Cash ",
+  "Credit slip",
+
 ];
 
 const masterProducts: MasterProduct[] = [
@@ -101,7 +101,9 @@ const masterProducts: MasterProduct[] = [
   },
 ];
 
-
+interface RefundCartItem extends MasterProduct {
+  qty: number;
+}
 // ======================================================
 // REUSABLE STYLES
 // ======================================================
@@ -122,6 +124,7 @@ const smallInputClass = `
   focus:border-[#0E9351]
   focus:ring-2
   focus:ring-[#0E9351]/15
+  disabled:cursor-not-allowed disabled:bg-[#F3F4F2] disabled:text-gray-400
 `;
 
 const lockedInputClass = `
@@ -745,8 +748,9 @@ function SalesRefund() {
   // SELECTED PRODUCT + DISCOUNT
   // ====================================================
 
-  const [selectedProduct, setSelectedProduct] =
-    useState<MasterProduct | null>(null);
+  const [cartItems, setCartItems] = useState<
+    RefundCartItem[]
+  >([]);
 
   const [discountPercent, setDiscountPercent] =
     useState<number>(0);
@@ -790,8 +794,28 @@ function SalesRefund() {
     product: MasterProduct
   ) => {
 
-    setSelectedProduct(product);
-    setBarcodeInput(product.barcode);
+    setCartItems((prev) => {
+
+      const existing = prev.find(
+        (item) => item.id === product.id
+      );
+
+      if (existing) {
+
+        return prev.map((item) =>
+          item.id === product.id
+            ? { ...item, qty: item.qty + 1 }
+            : item
+        );
+
+      }
+
+      return [
+        ...prev,
+        { ...product, qty: 1 },
+      ];
+
+    });
 
     showToast(
       `${product.prodName} added to refund`,
@@ -825,6 +849,8 @@ function SalesRefund() {
     }
 
     applyProduct(match);
+
+    setBarcodeInput("");
   };
 
   const handleSearchSelect = (
@@ -832,14 +858,26 @@ function SalesRefund() {
   ) => {
 
     applyProduct(product);
+    setBarcodeInput("");
     setIsSearchOpen(false);
   };
 
-  const handleClearProduct = () => {
+  const handleRemoveItem = (id: number) => {
 
-    setSelectedProduct(null);
-    setBarcodeInput("");
+    setCartItems((prev) =>
+      prev
+        .map((item) =>
+          item.id === id
+            ? { ...item, qty: item.qty - 1 }
+            : item
+        )
+        .filter((item) => item.qty > 0)
+    );
+  };
 
+  const handleClearCart = () => {
+
+    setCartItems([]);
     setDiscountPercent(0);
   };
 
@@ -848,8 +886,10 @@ function SalesRefund() {
   // CALCULATIONS
   // ====================================================
 
-  const totalProductPrice =
-    selectedProduct?.unitPrice ?? 0;
+  const totalProductPrice = cartItems.reduce(
+    (sum, item) => sum + item.qty * item.unitPrice,
+    0
+  );
 
   const discountAmount =
     (totalProductPrice * Number(discountPercent)) / 100;
@@ -857,8 +897,26 @@ function SalesRefund() {
   const priceAfterDiscount =
     totalProductPrice - discountAmount;
 
-  const vatAmount =
-    (priceAfterDiscount * (selectedProduct?.vat ?? 0)) / 100;
+  const vatAmount = cartItems.reduce(
+    (sum, item) => {
+
+      const itemTotal = item.qty * item.unitPrice;
+
+      const itemShare =
+        totalProductPrice > 0
+          ? itemTotal / totalProductPrice
+          : 0;
+
+      const itemAfterDiscount =
+        itemTotal - discountAmount * itemShare;
+
+      return (
+        sum +
+        (itemAfterDiscount * item.vat) / 100
+      );
+    },
+    0
+  );
 
   const returnAmount =
     priceAfterDiscount + vatAmount;
@@ -878,7 +936,7 @@ function SalesRefund() {
       return;
     }
 
-    if (!selectedProduct) {
+    if (cartItems.length === 0) {
       showToast(
         "Add a product to refund",
         "error"
@@ -1139,11 +1197,13 @@ function SalesRefund() {
             >
 
               <input
+              type="text"
+              disabled={refundType !== "Credit slip"}
                 value={creditSlipNo}
                 onChange={(e) =>
                   setCreditSlipNo(e.target.value)
                 }
-                className={smallInputClass}
+                className={smallInputClass} 
                 placeholder="Enter credit slip number"
               />
 
@@ -1274,6 +1334,287 @@ function SalesRefund() {
 
 
         {/* =============================================== */}
+        {/* REFUND CART TABLE */}
+        {/* =============================================== */}
+
+        <section className="
+          rounded-lg
+          border
+          border-[#DDE5DF]
+          bg-white
+          p-4
+          shadow-[0_1px_3px_rgba(35,42,35,0.05)]
+        ">
+
+          <div className="
+            mb-3
+            flex
+            flex-wrap
+            items-center
+            justify-between
+            gap-2
+          ">
+
+            <div className="
+              flex
+              items-center
+              gap-2
+            ">
+
+              <Package
+                size={14}
+                className="text-[#10673E]"
+              />
+
+              <h2 className="
+                text-xs
+                font-semibold
+                text-[#17231D]
+              ">
+                Refund Cart
+              </h2>
+
+            </div>
+
+            {cartItems.length > 0 && (
+
+              <button
+                type="button"
+                onClick={handleClearCart}
+                className={secondaryButtonClass}
+              >
+                <X size={13} />
+                Clear Cart
+              </button>
+
+            )}
+
+          </div>
+
+          <div className="
+            max-h-[150px]
+            overflow-auto
+            rounded-md
+            border
+            border-[#E6EAE3]
+          ">
+
+            <table className="
+              w-full
+              min-w-[680px]
+              border-collapse
+              text-xs
+            ">
+
+              <thead className="
+                sticky
+                top-0
+                z-10
+                bg-[#10673E]
+                text-white
+              ">
+
+                <tr>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-left
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Product Name
+                  </th>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-left
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Barcode
+                  </th>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-center
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Quantity
+                  </th>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-right
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Unit Price
+                  </th>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-right
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Total Price
+                  </th>
+
+                  <th className="
+                    px-3
+                    py-2.5
+                    text-center
+                    text-[10px]
+                    font-semibold
+                  ">
+                    Action
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {cartItems.length === 0 ? (
+
+                  <tr>
+
+                    <td
+                      colSpan={6}
+                      className="
+                        py-10
+                        text-center
+                        text-[10px]
+                        text-[#9AA29C]
+                      "
+                    >
+                      No products added yet — scan a barcode or use the search button
+                    </td>
+
+                  </tr>
+
+                ) : (
+
+                  cartItems.map((item) => {
+
+                    const itemTotal =
+                      item.qty * item.unitPrice;
+
+                    return (
+
+                      <tr
+                        key={item.id}
+                        className="
+                          border-b
+                          border-[#ECEFEA]
+                          transition-colors
+                          hover:bg-[#F1F8F3]
+                        "
+                      >
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          font-medium
+                          text-[#17231D]
+                        ">
+                          {item.prodName}
+                        </td>
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          font-mono
+                          text-[11px]
+                          text-[#66736B]
+                        ">
+                          {item.barcode}
+                        </td>
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          text-center
+                          font-semibold
+                          tabular-nums
+                          text-[#17231D]
+                        ">
+                          {item.qty}
+                        </td>
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          text-right
+                          tabular-nums
+                          text-[#17231D]
+                        ">
+                          {item.unitPrice.toFixed(2)}
+                        </td>
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          text-right
+                          font-semibold
+                          tabular-nums
+                          text-[#10673E]
+                        ">
+                          {itemTotal.toFixed(2)}
+                        </td>
+
+                        <td className="
+                          px-3
+                          py-2.5
+                          text-center
+                        ">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRemoveItem(item.id)
+                            }
+                            title="Remove one"
+                            className="
+                              inline-flex
+                              h-7
+                              w-7
+                              items-center
+                              justify-center
+                              rounded-md
+                              text-[#8A938B]
+                              transition
+                              hover:bg-[#FCECEC]
+                              hover:text-[#B84A4A]
+                            "
+                          >
+                            <X size={13} />
+                          </button>
+
+                        </td>
+
+                      </tr>
+                    );
+                  })
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </section>
+
+
+        {/* =============================================== */}
         {/* RETURN SUMMARY CARD */}
         {/* =============================================== */}
 
@@ -1316,9 +1657,9 @@ function SalesRefund() {
 
             </div>
 
-            {/* Selected product strip */}
+            {/* Cart summary strip */}
 
-            {selectedProduct ? (
+            {cartItems.length > 0 ? (
               <div className="
                 flex
                 items-center
@@ -1341,36 +1682,8 @@ function SalesRefund() {
                   font-medium
                   text-[#17231D]
                 ">
-                  {selectedProduct.prodName}
+                  {cartItems.length} item{cartItems.length > 1 ? "s" : ""} in cart
                 </span>
-
-                <span className="
-                  rounded
-                  bg-white
-                  px-1.5
-                  py-0.5
-                  font-mono
-                  text-[9px]
-                  text-[#66736B]
-                ">
-                  {selectedProduct.barcode}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={handleClearProduct}
-                  title="Remove product"
-                  className="
-                    rounded
-                    p-0.5
-                    text-[#8A938B]
-                    transition
-                    hover:bg-[#FCECEC]
-                    hover:text-[#B84A4A]
-                  "
-                >
-                  <X size={12} />
-                </button>
 
               </div>
             ) : (
@@ -1424,7 +1737,7 @@ function SalesRefund() {
                       Math.max(0, Number(e.target.value))
                     )
                   }
-                  disabled={!selectedProduct}
+                  disabled={cartItems.length === 0}
                   className={`
                     ${smallInputClass}
                     pr-7

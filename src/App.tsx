@@ -21,11 +21,17 @@ import SalesRefund from './pages/Sales/SalesRefund'
 import StockUpdate from './pages/Products/StockUpdate'
 import CustomerEntry from './pages/Customers/CustomerEntry'
 import ProductManagement from './pages/Products/ProductManagement'
+import DiscountManagement from './pages/Products/DiscountManagement'
 import CreateUser from './pages/Admin/CreateUser'
 import LabelPrint from './pages/Products/LabelPrint'
 import ProductReport from './pages/Reports/ProductReport'
 import RoleManagement from './pages/Admin/RoleManagement'
 import SalesTargetPage from './pages/Admin/SalesTargetPage'
+import PaymentTypeManagement from './pages/Admin/PaymentTypeManagement'
+import BranchManagement from './pages/Admin/BranchManagement'
+import CounterManagement from './pages/Admin/CounterManagement'
+import ChangePassword from './pages/Admin/ChangePassword'
+import ErrorPage from './pages/ErrorPage'
 
 function App() {
   return (
@@ -57,13 +63,18 @@ function App() {
             <Route path="/salesrefund" element={<SalesRefund />} />
             <Route path="/stockupdate" element={<StockUpdate />} />
             <Route path="/productmanagement" element={<ProductManagement />} />
+            <Route path="/discounts" element={<DiscountManagement />} />
             <Route path="/customers" element={<CustomerEntry />} />
             <Route path="/createuser" element={<CreateUser />} />
             <Route path="/labelprint" element={<LabelPrint />} />
                 <Route path="/prodreport" element={<ProductReport />} />
                 <Route path="/roles" element={<RoleManagement />} />
                 <Route path="/salestarget" element={<SalesTargetPage />} />
-           
+                <Route path="/paymenttypes" element={<PaymentTypeManagement />} />
+                <Route path="/branches" element={<BranchManagement />} />
+                <Route path="/counters" element={<CounterManagement />} />
+                <Route path="/changepassword" element={<ChangePassword />} />
+            <Route path="*" element={<ErrorPage />} />
           </Route>
 
           {/* POS Layout (Protected) */}

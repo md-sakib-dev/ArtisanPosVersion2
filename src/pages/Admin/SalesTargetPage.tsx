@@ -6,7 +6,7 @@ import {
   X,
   ChevronDown,
   Search,
-  RotateCcw,
+  //RotateCcw,
   CalendarDays,
   Calendar,
   ChevronLeft,
@@ -547,12 +547,12 @@ export default function SalesTargetPage() {
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {filteredPersons.map((sp) => {
-                    const total = dailyTotal(sp.id);
-                    const monthlyEst = sp.monthlyTarget;
-                    const pct =
-                      monthlyEst > 0
-                        ? Math.round((total / monthlyEst) * 100 * 4.3)
-                        : 0;
+                    // const total = dailyTotal(sp.id);
+                    // const monthlyEst = sp.monthlyTarget;
+                    // const pct =
+                    //   monthlyEst > 0
+                    //     ? Math.round((total / monthlyEst) * 100 * 4.3)
+                    //     : 0;
 
                     return (
                       <tr

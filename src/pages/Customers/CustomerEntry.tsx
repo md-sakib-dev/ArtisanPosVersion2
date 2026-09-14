@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   UserPlus,
   Save,
@@ -15,6 +15,8 @@ import {
   Globe,
   Users,
   List,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -68,11 +70,7 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 
   return (
     <div
-      className={`
-        fixed top-5 right-5 z-50 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-lg
-        transition-all duration-300
-        ${type === "success" ? "border-[#10673E]/20 bg-white text-[#10673E]" : "border-red-200 bg-white text-red-600"}
-      `}
+      className={`fixed top-5 right-5 z-[60] flex items-center gap-3 rounded-xl border px-4 py-3 shadow-lg transition-all duration-300 ${type === "success" ? "border-[#10673E]/20 bg-white text-[#10673E]" : "border-red-200 bg-white text-red-600"}`}
       style={{ animation: "fade-up 0.3s ease both" }}
     >
       {type === "success" ? <CheckCircle2 size={18} /> : <X size={18} />}
@@ -85,456 +83,350 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 }
 
 /* ------------------------------------------------------------------ */
-/* Page                                                                 */
+/* Customer Modal                                                        */
 /* ------------------------------------------------------------------ */
 
-export default function CustomerEntry() {
+function CustomerModal({
+  open,
+  customer,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  customer: Customer | null;
+  onClose: () => void;
+  onSave: (customer: Customer, isEdit: boolean) => void;
+}) {
   const [form, setForm] = useState<Customer>({ ...EMPTY_FORM });
-  const [isEditing, setIsEditing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Customer[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  /* Close dropdown on outside click */
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  /* Search customers */
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      return;
+    if (customer) {
+      setForm({ ...customer });
+    } else {
+      setForm({ ...EMPTY_FORM });
     }
-    const q = query.toLowerCase();
-    const results = MOCK_CUSTOMERS.filter(
-      (c) => c.phone.includes(q) || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
-    );
-    setSearchResults(results);
-    setShowDropdown(results.length > 0);
-  };
+  }, [customer, open]);
 
-  /* Select a customer for editing */
-  const handleSelectCustomer = (customer: Customer) => {
-    setForm({ ...customer });
-    setIsEditing(true);
-    setSearchQuery(customer.phone);
-    setShowDropdown(false);
-  };
-
-  /* Clear search and load blank form */
-  const handleClearSearch = () => {
-    setSearchQuery("");
-    setForm({ ...EMPTY_FORM });
-    setIsEditing(false);
-    setSearchResults([]);
-    setShowDropdown(false);
-  };
-
-  /* Update form field */
   const update = (field: keyof Customer, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  /* Submit */
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.phone.trim()) {
       setToast({ message: "Please fill in Name and Contact Number", type: "error" });
       return;
     }
-    if (isEditing) {
-      setToast({ message: `Customer "${form.name}" updated successfully`, type: "success" });
+    const isEdit = Boolean(customer);
+    onSave(form, isEdit);
+    onClose();
+  };
+
+  const handleReset = () => {
+    setForm(customer ? { ...customer } : { ...EMPTY_FORM });
+  };
+
+  if (!open) return null;
+
+  const isEdit = Boolean(customer);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+      style={{ animation: "fade-up 0.2s ease both" }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b border-[#E5E7EB] px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#10673E]/10 text-[#10673E]">
+              {isEdit ? <Pencil size={17} /> : <UserPlus size={17} />}
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-[#1F2937]">
+                {isEdit ? "Edit Customer" : "Add New Customer"}
+              </h2>
+              <p className="text-[11.5px] text-[#94A3B8]">
+                {isEdit ? `Editing ${customer?.id} — Update customer details below` : "Fill in the customer details below"}
+              </p>
+            </div>
+            {isEdit && (
+              <span className="rounded-md bg-[#2D5597]/10 px-2 py-0.5 text-[11px] font-semibold text-[#2D5597]">
+                Edit Mode
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#64748B]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <form onSubmit={handleSubmit} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-5 p-6">
+            {/* Primary Info */}
+            <div>
+              <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">Primary Information</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <FormField label="Customer Name" required icon={<Users size={14} />} value={form.name} onChange={(v) => update("name", v)} placeholder="Full name" />
+                <FormField label="Phone Number" required icon={<Phone size={14} />} value={form.phone} onChange={(v) => update("phone", v)} placeholder="01XXXXXXXXX" />
+                <FormField label="Email Address" type="email" icon={<Mail size={14} />} value={form.email} onChange={(v) => update("email", v)} placeholder="email@example.com" />
+                <FormSelect label="Gender" icon={<Users size={14} />} value={form.gender} onChange={(v) => update("gender", v)} options={["", "Male", "Female", "Other"]} placeholders={["Select gender", "Male", "Female", "Other"]} />
+                <FormField label="Date of Birth" type="date" icon={<Calendar size={14} />} value={form.dob} onChange={(v) => update("dob", v)} />
+                <FormSelect label="Country" icon={<Globe size={14} />} value={form.country} onChange={(v) => update("country", v)} options={COUNTRIES} placeholders={COUNTRIES} />
+              </div>
+            </div>
+
+            {/* Additional Info */}
+            <div>
+              <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">Additional Details</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <FormField label="Address" icon={<MapPin size={14} />} value={form.address} onChange={(v) => update("address", v)} placeholder="Full address" />
+                </div>
+                <FormSelect label="Discount / Category" icon={<BadgePercent size={14} />} value={form.discount} onChange={(v) => update("discount", v)} options={DISCOUNT_TIERS} placeholders={DISCOUNT_TIERS} />
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="border-t border-[#E5E7EB] bg-[#FAFBFC] px-6 py-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] text-[#94A3B8]">
+                {isEdit ? `Editing customer ${customer?.id}` : "All fields marked with * are required"}
+              </p>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={handleReset} className="flex items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-4 py-2.5 text-[13px] font-medium text-[#6B7280] transition-all hover:bg-[#F9FAFB] hover:text-[#374151]">
+                  <RotateCcw size={15} />
+                  Reset
+                </button>
+                <button type="button" onClick={onClose} className="flex items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-4 py-2.5 text-[13px] font-medium text-[#6B7280] transition-all hover:bg-[#F9FAFB] hover:text-[#374151]">
+                  Cancel
+                </button>
+                <button type="submit" className="flex items-center gap-2 rounded-lg bg-[#10673E] px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md">
+                  <Save size={15} />
+                  {isEdit ? "Update Customer" : "Save Customer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {toast && (
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                 */
+/* ------------------------------------------------------------------ */
+
+export default function CustomerEntry() {
+  const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS);
+  const [nextId, setNextId] = useState(6);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const filteredData = useMemo(() => {
+    if (!searchTerm.trim()) return customers;
+    const term = searchTerm.toLowerCase();
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(term) ||
+        c.phone.toLowerCase().includes(term) ||
+        c.email.toLowerCase().includes(term) ||
+        c.id.toLowerCase().includes(term)
+    );
+  }, [customers, searchTerm]);
+
+  const handleAddNew = () => {
+    setEditingCustomer(null);
+    setModalOpen(true);
+  };
+
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setModalOpen(true);
+  };
+
+  const handleSave = (formData: Customer, isEdit: boolean) => {
+    if (isEdit) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === formData.id ? { ...formData } : c))
+      );
+      setToast({ message: `Customer "${formData.name}" updated successfully`, type: "success" });
     } else {
-      setToast({ message: `Customer "${form.name}" registered successfully`, type: "success" });
-      setForm({ ...EMPTY_FORM });
-      setSearchQuery("");
-      setIsEditing(false);
+      const newId = `C${String(nextId).padStart(3, "0")}`;
+      setCustomers((prev) => [...prev, { ...formData, id: newId }]);
+      setNextId((p) => p + 1);
+      setToast({ message: `Customer "${formData.name}" registered successfully`, type: "success" });
     }
   };
 
-  /* Reset form */
-  const handleReset = () => {
-    setForm({ ...EMPTY_FORM });
-    setIsEditing(false);
-    setSearchQuery("");
+  const handleDelete = (id: string) => {
+    setCustomers((prev) => prev.filter((c) => c.id !== id));
+    setToast({ message: "Customer deleted", type: "success" });
   };
 
   return (
     <div className="h-full overflow-y-auto bg-[#F5F7F3]">
-      <div
-        className="mx-auto max-w-[1200px] space-y-5 p-4 lg:p-6"
-        style={{ animation: "fade-up 0.4s ease both" }}
-      >
-        {/* Toast */}
+      <div className="mx-auto max-w-[1440px] space-y-5 p-4 lg:p-6" style={{ animation: "fade-up 0.4s ease both" }}>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
         {/* -------- Header -------- */}
         <header>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#10673E]/10 text-[#10673E]">
-              <UserPlus size={20} />
+              <Users size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-[#1F2937] md:text-2xl">
-                Customer Registration
-              </h1>
-              <p className="mt-0.5 text-[12.5px] text-[#6B7280]">
-                Create and manage customer profiles, preferences, and loyalty details
-              </p>
+              <h1 className="text-xl font-bold tracking-tight text-[#1F2937] md:text-2xl">Customer Management</h1>
+              <p className="mt-0.5 text-[12.5px] text-[#6B7280]">Manage customer profiles, preferences, and loyalty details</p>
             </div>
-            {isEditing && (
-              <span className="ml-2 inline-flex items-center gap-1.5 rounded-lg bg-[#2D5597]/10 px-3 py-1.5 text-[12px] font-semibold text-[#2D5597]">
-                <Pencil size={13} />
-                Editing: {form.id}
-              </span>
-            )}
           </div>
         </header>
 
-        {/* -------- Search / Contact Row -------- */}
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xs">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2D5597]/10 text-[#2D5597]">
-              <Search size={18} />
-            </div>
-            <div>
-              <h2 className="text-[14px] font-bold text-[#1F2937]">Find Existing Customer</h2>
-              <p className="mt-0.5 text-[11.5px] text-[#94A3B8]">Search by phone number, name, or email to edit an existing record</p>
-            </div>
-          </div>
-
-          <div className="relative" ref={dropdownRef}>
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="01XXXXXXXXX or customer name"
-                  className="
-                    w-full
-                    rounded-lg
-                    border
-                    border-[#D1D5DB]
-                    bg-[#F9FAFB]
-                    py-2.5
-                    pl-10
-                    pr-4
-                    text-[13px]
-                    text-[#1F2937]
-                    placeholder-[#9CA3AF]
-                    transition-all
-                    focus:border-[#10673E]
-                    focus:bg-white
-                    focus:outline-none
-                    focus:ring-2
-                    focus:ring-[#10673E]/20
-                  "
-                />
-              </div>
-              {isEditing && (
-                <button
-                  onClick={handleClearSearch}
-                  className="
-                    flex
-                    items-center
-                    gap-1.5
-                    rounded-lg
-                    border
-                    border-[#D1D5DB]
-                    bg-white
-                    px-3
-                    py-2.5
-                    text-[12px]
-                    font-medium
-                    text-[#6B7280]
-                    transition-colors
-                    hover:bg-[#F9FAFB]
-                    hover:text-[#374151]
-                  "
-                >
-                  <RotateCcw size={14} />
-                  New Customer
-                </button>
-              )}
-            </div>
-
-            {/* Search Dropdown */}
-            {showDropdown && searchResults.length > 0 && (
-              <div className="absolute left-0 top-full z-30 mt-2 w-full max-w-lg overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xl">
-                <div className="border-b border-[#E5E7EB] px-4 py-2.5">
-                  <p className="text-[11.5px] font-medium text-[#94A3B8]">{searchResults.length} customer{searchResults.length !== 1 ? "s" : ""} found</p>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {searchResults.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => handleSelectCustomer(c)}
-                      className="
-                        flex
-                        w-full
-                        items-center
-                        gap-3
-                        px-4
-                        py-3
-                        text-left
-                        transition-colors
-                        hover:bg-[#F1F8F3]
-                      "
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#10673E]/10 text-[#10673E] text-[12px] font-bold">
-                        {c.id}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-semibold text-[#1F2937]">{c.name}</p>
-                        <p className="text-[11.5px] text-[#94A3B8]">{c.phone} · {c.email}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold ${c.discount === "VIP" ? "bg-[#E2BA48]/15 text-[#C9A02E]" : "bg-[#F1F5F9] text-[#64748B]"}`}>
-                          {c.discount}
-                        </span>
-                        <Pencil size={13} className="text-[#94A3B8]" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* -------- Customer Form -------- */}
-        <form onSubmit={handleSubmit}>
-          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs overflow-hidden">
-            {/* Section Header */}
-            <div className="border-b border-[#E5E7EB] px-5 py-4">
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-[#10673E]" />
-                <h2 className="text-[14px] font-bold text-[#1F2937]">Customer Details</h2>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-6">
-              {/* ---- Primary Details (4-col) ---- */}
-              <div>
-                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">Primary Information</p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <FormField
-                    label="Customer Name"
-                    required
-                    icon={<Users size={14} />}
-                    value={form.name}
-                    onChange={(v) => update("name", v)}
-                    placeholder="Full name"
-                  />
-                  <FormField
-                    label="Email Address"
-                    type="email"
-                    icon={<Mail size={14} />}
-                    value={form.email}
-                    onChange={(v) => update("email", v)}
-                    placeholder="email@example.com"
-                  />
-                  <FormSelect
-                    label="Gender"
-                    icon={<Users size={14} />}
-                    value={form.gender}
-                    onChange={(v) => update("gender", v)}
-                    options={["", "Male", "Female", "Other"]}
-                    placeholders={["Select gender", "Male", "Female", "Other"]}
-                  />
-                  <FormField
-                    label="Date of Birth"
-                    type="date"
-                    icon={<Calendar size={14} />}
-                    value={form.dob}
-                    onChange={(v) => update("dob", v)}
-                  />
-                </div>
-              </div>
-
-              {/* ---- Secondary Details (4-col) ---- */}
-              <div>
-                <p className="mb-3 text-[11.5px] font-semibold uppercase tracking-wider text-[#94A3B8]">Additional Details</p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="lg:col-span-2">
-                    <FormField
-                      label="Address"
-                      icon={<MapPin size={14} />}
-                      value={form.address}
-                      onChange={(v) => update("address", v)}
-                      placeholder="Full address"
-                    />
-                  </div>
-                  <FormSelect
-                    label="Country"
-                    icon={<Globe size={14} />}
-                    value={form.country}
-                    onChange={(v) => update("country", v)}
-                    options={COUNTRIES}
-                    placeholders={COUNTRIES}
-                  />
-                  <FormSelect
-                    label="Discount / Category"
-                    icon={<BadgePercent size={14} />}
-                    value={form.discount}
-                    onChange={(v) => update("discount", v)}
-                    options={DISCOUNT_TIERS}
-                    placeholders={DISCOUNT_TIERS}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ---- Action Bar ---- */}
-            <div className="border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[12px] text-[#94A3B8]">
-                  {isEditing ? `Editing customer ${form.id}` : "All fields marked with * are required"}
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="
-                      flex
-                      items-center
-                      gap-2
-                      rounded-lg
-                      border
-                      border-[#D1D5DB]
-                      bg-white
-                      px-4
-                      py-2.5
-                      text-[13px]
-                      font-medium
-                      text-[#6B7280]
-                      transition-all
-                      hover:bg-[#F9FAFB]
-                      hover:text-[#374151]
-                    "
-                  >
-                    <RotateCcw size={15} />
-                    Clear
-                  </button>
-                  <button
-                    type="submit"
-                    className="
-                      flex
-                      items-center
-                      gap-2
-                      rounded-lg
-                      bg-[#10673E]
-                      px-5
-                      py-2.5
-                      text-[13px]
-                      font-semibold
-                      text-white
-                      shadow-sm
-                      transition-all
-                      duration-200
-                      hover:-translate-y-0.5
-                      hover:bg-[#0D5A35]
-                      hover:shadow-md
-                    "
-                  >
-                    <Save size={15} />
-                    {isEditing ? "Update Customer" : "Save Customer"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </form>
-
         {/* -------- Customer List Table -------- */}
         <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs overflow-hidden">
-          <div className="border-b border-[#E5E7EB] px-5 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <List size={16} className="text-[#10673E]" />
-                <h2 className="text-[14px] font-bold text-[#1F2937]">All Customers</h2>
-              </div>
-              <span className="rounded-lg bg-[#F1F5F9] px-2.5 py-1 text-[11.5px] font-semibold text-[#64748B]">
-                {MOCK_CUSTOMERS.length} records
+          {/* Table Header Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
+            <div className="flex items-center gap-2">
+              <List size={16} className="text-[#10673E]" />
+              <h2 className="text-[14px] font-bold text-[#1F2937]">All Customers</h2>
+              <span className="rounded-md bg-[#10673E]/10 px-2.5 py-1 text-[11px] font-semibold text-[#10673E]">
+                {filteredData.length} records
               </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by name, phone, or email..."
+                  className="h-9 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] text-[#1F2937] outline-none placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15 sm:w-72"
+                />
+              </div>
+              <button
+                onClick={handleAddNew}
+                className="flex h-9 items-center gap-2 rounded-lg bg-[#10673E] px-4 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98]"
+              >
+                <Plus size={15} />
+                Add Customer
+              </button>
             </div>
           </div>
 
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[13px]">
               <thead>
-                <tr className="border-b border-[#E5E7EB]">
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">ID</th>
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">Name</th>
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">Phone</th>
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">Email</th>
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">Gender</th>
-                  <th className="px-5 py-3 text-[11.5px] font-semibold text-[#6B7280]">Category</th>
-                  <th className="px-5 py-3 text-right text-[11.5px] font-semibold text-[#6B7280]">Actions</th>
+                <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">ID</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Name</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Phone</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Email</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Gender</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Country</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Category</th>
+                  <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {MOCK_CUSTOMERS.map((c) => (
-                  <tr
-                    key={c.id}
-                    className={`transition-colors hover:bg-[#F9FAFB] ${
-                      form.id === c.id ? "bg-[#F1F8F3]" : ""
-                    }`}
-                  >
-                    <td className="px-5 py-3 font-medium text-[#64748B] tabular-nums">{c.id}</td>
-                    <td className="px-5 py-3 font-semibold text-[#1F2937]">{c.name}</td>
-                    <td className="px-5 py-3 text-[#374151] tabular-nums">{c.phone}</td>
-                    <td className="px-5 py-3 text-[#6B7280]">{c.email}</td>
-                    <td className="px-5 py-3 text-[#6B7280]">{c.gender}</td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                        c.discount === "VIP" ? "bg-[#E2BA48]/15 text-[#C9A02E]" :
-                        c.discount === "Wholesale" ? "bg-[#2D5597]/10 text-[#2D5597]" :
-                        "bg-[#F1F5F9] text-[#64748B]"
-                      }`}>
-                        {c.discount}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => handleSelectCustomer(c)}
-                        className="
-                          inline-flex
-                          items-center
-                          gap-1.5
-                          rounded-lg
-                          px-2.5
-                          py-1.5
-                          text-[12px]
-                          font-medium
-                          text-[#10673E]
-                          transition-colors
-                          hover:bg-[#E8F5ED]
-                        "
-                      >
-                        <Pencil size={13} />
-                        Edit
-                      </button>
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-[#94A3B8]">
+                        <Users size={30} strokeWidth={1.5} />
+                        <p className="mt-2 text-[13px] font-medium">No customers found</p>
+                        <p className="mt-1 text-[12px]">{searchTerm ? "Try a different search term" : "Add your first customer above"}</p>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredData.map((c) => (
+                    <tr key={c.id} className="transition-colors hover:bg-[#F8FAFC]">
+                      <td className="px-5 py-3 font-medium text-[#94A3B8] tabular-nums">{c.id}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E] text-[11px] font-bold">
+                            {c.name.charAt(0)}
+                          </div>
+                          <span className="font-semibold text-[#1F2937]">{c.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 tabular-nums text-[#374151]">{c.phone}</td>
+                      <td className="px-5 py-3 text-[#6B7280]">{c.email}</td>
+                      <td className="px-5 py-3 text-[#6B7280]">{c.gender || "—"}</td>
+                      <td className="px-5 py-3 text-[#6B7280]">{c.country}</td>
+                      <td className="px-5 py-3">
+                        <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                          c.discount === "VIP" ? "bg-[#E2BA48]/15 text-[#C9A02E]" :
+                          c.discount === "Wholesale" ? "bg-[#2D5597]/10 text-[#2D5597]" :
+                          "bg-[#F1F5F9] text-[#64748B]"
+                        }`}>
+                          {c.discount}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEdit(c)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-[#64748B] transition-colors hover:bg-[#E8F5ED] hover:text-[#10673E]"
+                            title="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-[#94A3B8] transition-colors hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Table Footer */}
+          {filteredData.length > 0 && (
+            <div className="flex items-center justify-between border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
+              <p className="text-[12px] text-[#94A3B8]">
+                Showing {filteredData.length} of {customers.length} customers
+              </p>
+              <div className="flex items-center gap-2 text-[12px]">
+                <span className="text-[#94A3B8]">VIP:</span>
+                <span className="font-semibold text-[#C9A02E]">{filteredData.filter((c) => c.discount === "VIP").length}</span>
+                <span className="mx-1 text-[#E5E7EB]">|</span>
+                <span className="text-[#94A3B8]">Regular:</span>
+                <span className="font-semibold text-[#10673E]">{filteredData.filter((c) => c.discount === "Regular").length}</span>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* -------- Customer Modal -------- */}
+        <CustomerModal
+          open={modalOpen}
+          customer={editingCustomer}
+          onClose={() => { setModalOpen(false); setEditingCustomer(null); }}
+          onSave={handleSave}
+        />
       </div>
     </div>
   );
@@ -567,33 +459,13 @@ function FormField({
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <div className="relative">
-        {icon && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]">{icon}</span>
-        )}
+        {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]">{icon}</span>}
         <input
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`
-            w-full
-            rounded-lg
-            border
-            border-[#D1D5DB]
-            bg-[#F9FAFB]
-            py-2.5
-            text-[13px]
-            text-[#1F2937]
-            placeholder-[#9CA3AF]
-            transition-all
-            focus:border-[#10673E]
-            focus:bg-white
-            focus:outline-none
-            focus:ring-2
-            focus:ring-[#10673E]/20
-            ${icon ? "pl-10" : "pl-3.5"}
-            pr-3.5
-          `}
+          className={`w-full rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] py-2.5 text-[13px] text-[#1F2937] placeholder-[#9CA3AF] transition-all focus:border-[#10673E] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#10673E]/20 ${icon ? "pl-10" : "pl-3.5"} pr-3.5`}
         />
       </div>
     </div>
@@ -619,31 +491,11 @@ function FormSelect({
     <div>
       <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">{label}</label>
       <div className="relative">
-        {icon && (
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]">{icon}</span>
-        )}
+        {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]">{icon}</span>}
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`
-            w-full
-            appearance-none
-            rounded-lg
-            border
-            border-[#D1D5DB]
-            bg-[#F9FAFB]
-            py-2.5
-            text-[13px]
-            text-[#1F2937]
-            transition-all
-            focus:border-[#10673E]
-            focus:bg-white
-            focus:outline-none
-            focus:ring-2
-            focus:ring-[#10673E]/20
-            ${icon ? "pl-10" : "pl-3.5"}
-            pr-8
-          `}
+          className={`w-full appearance-none rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] py-2.5 text-[13px] text-[#1F2937] transition-all focus:border-[#10673E] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#10673E]/20 ${icon ? "pl-10" : "pl-3.5"} pr-8`}
         >
           {options.map((opt, i) => (
             <option key={opt || "empty"} value={opt}>
@@ -660,3 +512,5 @@ function FormSelect({
     </div>
   );
 }
+
+

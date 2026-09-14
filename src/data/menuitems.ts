@@ -14,6 +14,10 @@ import {
   Tags,
   Shield,
   Target,
+  CreditCard,
+  Building2,
+  Monitor,
+  BadgePercent,
 } from "lucide-react";
 import type { MenuItem } from "../types/menu";
 
@@ -47,6 +51,25 @@ export const menuItems: MenuItem[] = [
         icon: Target,
         path: "/salestarget",
       },
+      {
+        id: 26,
+        label: "Payment Types",
+        icon: CreditCard,
+        path: "/paymenttypes",
+      },
+      {
+        id: 27,
+        label: "Branch Management",
+        icon: Building2,
+        path: "/branches",
+      },
+      {
+        id: 28,
+        label: "Counter Management",
+        icon: Monitor,
+        path: "/counters",
+      },
+
     ],
   },
   {
@@ -111,13 +134,13 @@ export const menuItems: MenuItem[] = [
     children: [
       {
         id: 15,
-        label: "New Sale",
+        label: "Regular  Sale",
         icon: ShoppingCart,
         path: "/saleentry",
       },
       {
         id: 16,
-        label: "Returns",
+        label: "Sales Refund",
         icon: RotateCcw,
         path: "/salesrefund",
       },
@@ -145,6 +168,12 @@ export const menuItems: MenuItem[] = [
         label: "Label Printing",
         icon: ShoppingCart,
         path: "/products",
+      },
+      {
+        id: 29,
+        label: "Discount Management",
+        icon: BadgePercent,
+        path: "/discounts",
       },
     ],
   },
