@@ -1,6 +1,7 @@
 import {
   User,
   ChevronDown,
+
   Menu,
   KeyRound,
   LogOut,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 import logo from "../../assets/abc.png";
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface HeaderProps {
@@ -34,7 +35,8 @@ const Header = ({ isCollapsed, setIsCollapsed }: HeaderProps) => {
   }, []);
 
   const handleChangePassword = () => {
-    // Change password logic
+    setIsUserMenuOpen(false);
+    navigate("/changepassword");
   };
 
   const handleLogout = () => {
@@ -74,11 +76,35 @@ const Header = ({ isCollapsed, setIsCollapsed }: HeaderProps) => {
         >
           <Menu size={22} />
         </button>
+        <Link to="/">
+        
         <img
           src={logo}
           alt="Company Logo"
           className="h-9 w-auto object-contain"
         />
+        </Link>
+
+        {/* <button
+          onClick={() => navigate("/dashboard")}
+          className="
+            flex
+            h-9
+            items-center
+            gap-1.5
+            rounded-lg
+            px-3
+            text-[13px]
+            font-semibold
+            text-[#10673E]
+            transition-colors
+            hover:bg-[#E8F5ED]
+          "
+          title="Go to Dashboard"
+        >
+          <LayoutDashboard size={17} />
+          Dashboard
+        </button> */}
       </div>
 
       {/* RIGHT SIDE */}
@@ -135,10 +161,7 @@ const Header = ({ isCollapsed, setIsCollapsed }: HeaderProps) => {
               </button>
 
               <button
-                onClick={() => {
-                  setIsUserMenuOpen(false);
-                  handleChangePassword();
-                }}
+                onClick={handleChangePassword}
                 className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-[#17231D] hover:bg-[#F1F8F3] transition-colors"
               >
                 <KeyRound size={16} className="text-[#10673E]" />

@@ -5,7 +5,6 @@ import {
   ClipboardList,
   Download,
   Hash,
-  Package,
   PackageCheck,
   Search,
   Truck,
@@ -24,28 +23,29 @@ import {
 // TYPES
 // ======================================================
 
+type DeliveryType =
+  | "Factory"
+  | "Stock Transfer"
+  | "Pricing";
+
 interface ReceiveItem {
   id: number;
-  itemName: string;
-  sku: string;
-  sentQty: number;
+  productName: string;
+  description: string;
+  barcode: string;
+  challanQty: number;
   receivedQty: number;
-  unit: string;
+  price: number;
 }
 
 interface PendingChallan {
   id: number;
+  type: DeliveryType;
   challanNo: string;
-  date: string;
-  vendor: string;
-  totalQty: number;
+  challanTime: string;
+  deliveryFrom: string;
   items: ReceiveItem[];
 }
-
-type ReceiveStatus =
-  | "complete"
-  | "short"
-  | "excess";
 
 type Toast =
   | {
@@ -59,136 +59,118 @@ type Toast =
 // SAMPLE DATA
 // ======================================================
 
+const deliveryTypeOptions: DeliveryType[] = [
+  "Factory",
+  "Stock Transfer",
+  "Pricing",
+];
+
 const pendingChallans: PendingChallan[] = [
   {
     id: 1,
-    challanNo: "CH-2026-0041",
-    date: "2026-08-14",
-    vendor: "Modern Traders",
-    totalQty: 120,
+    type: "Factory",
+    challanNo: "ARTSND-2608015038",
+    challanTime: "30 Aug 2026, 09:30 AM",
+    deliveryFrom: "Head Office",
     items: [
       {
         id: 11,
-        itemName: "Basmati Rice 5kg",
-        sku: "RICE-005",
-        sentQty: 50,
-        receivedQty: 50,
-        unit: "Bag",
+        productName: "Men's Casual Shirt",
+        description: "Cotton slim fit, sky blue",
+        barcode: "8801234567890",
+        challanQty: 48,
+        receivedQty: 48,
+        price: 320,
       },
       {
         id: 12,
-        itemName: "Sunflower Oil 1L",
-        sku: "OIL-001",
-        sentQty: 40,
-        receivedQty: 40,
-        unit: "Bottle",
+        productName: "Women's Silk Scarf",
+        description: "Handwoven, floral print",
+        barcode: "8801234567891",
+        challanQty: 36,
+        receivedQty: 36,
+        price: 750,
       },
       {
         id: 13,
-        itemName: "Sugar 1kg",
-        sku: "SUG-010",
-        sentQty: 30,
-        receivedQty: 30,
-        unit: "Pkt",
+        productName: "Kids' Denim Jacket",
+        description: "Washed denim, full sleeve",
+        barcode: "8801234567892",
+        challanQty: 24,
+        receivedQty: 24,
+        price: 950,
       },
     ],
   },
   {
     id: 2,
-    challanNo: "CH-2026-0038",
-    date: "2026-08-12",
-    vendor: "Agro Supplies Ltd.",
-    totalQty: 60,
+    type: "Stock Transfer",
+    challanNo: "ARTSND-2608015042",
+    challanTime: "30 Aug 2026, 12:15 PM",
+    deliveryFrom: "Uttara Branch",
     items: [
       {
         id: 21,
-        itemName: "Lentil (Masoor) 2kg",
-        sku: "LEN-002",
-        sentQty: 25,
-        receivedQty: 25,
-        unit: "Bag",
+        productName: "Men's Polo T-Shirt",
+        description: "Cotton pique, navy",
+        barcode: "8801234567893",
+        challanQty: 60,
+        receivedQty: 60,
+        price: 1250,
       },
       {
         id: 22,
-        itemName: "Tea Powder 500g",
-        sku: "TEA-004",
-        sentQty: 20,
-        receivedQty: 20,
-        unit: "Pkt",
+        productName: "Women's Panjabi",
+        description: "Embroidered cotton, beige",
+        barcode: "8801234567894",
+        challanQty: 45,
+        receivedQty: 45,
+        price: 1680,
       },
       {
         id: 23,
-        itemName: "Salt 1kg",
-        sku: "SLT-011",
-        sentQty: 15,
-        receivedQty: 15,
-        unit: "Pkt",
+        productName: "Women's Leggings",
+        description: "Stretchable, black",
+        barcode: "8801234567895",
+        challanQty: 30,
+        receivedQty: 30,
+        price: 2100,
       },
     ],
   },
   {
     id: 3,
-    challanNo: "CH-2026-0035",
-    date: "2026-08-10",
-    vendor: "City Distributors",
-    totalQty: 240,
+    type: "Pricing",
+    challanNo: "ARTSND-2608015047",
+    challanTime: "31 Aug 2026, 04:05 PM",
+    deliveryFrom: "Central Warehouse",
     items: [
       {
         id: 31,
-        itemName: "Mineral Water 1L",
-        sku: "WTR-020",
-        sentQty: 120,
-        receivedQty: 120,
-        unit: "Bottle",
+        productName: "Men's Formal Trousers",
+        description: "Slim fit, charcoal grey",
+        barcode: "8801234567896",
+        challanQty: 90,
+        receivedQty: 90,
+        price: 450,
       },
       {
         id: 32,
-        itemName: "Soft Drink 250ml",
-        sku: "DRK-021",
-        sentQty: 80,
-        receivedQty: 80,
-        unit: "Bottle",
+        productName: "Women's Maxi Dress",
+        description: "Rayon, boho print",
+        barcode: "8801234567897",
+        challanQty: 55,
+        receivedQty: 55,
+        price: 380,
       },
       {
         id: 33,
-        itemName: "Instant Noodles",
-        sku: "NDL-030",
-        sentQty: 40,
+        productName: "Baby Hoodie Set",
+        description: "Fleece, 2-piece, pastel",
+        barcode: "8801234567898",
+        challanQty: 40,
         receivedQty: 40,
-        unit: "Pkt",
-      },
-    ],
-  },
-  {
-    id: 4,
-    challanNo: "CH-2026-0031",
-    date: "2026-08-07",
-    vendor: "Fresh Mart",
-    totalQty: 36,
-    items: [
-      {
-        id: 41,
-        itemName: "Cooking Oil 5L",
-        sku: "OIL-005",
-        sentQty: 12,
-        receivedQty: 12,
-        unit: "Tin",
-      },
-      {
-        id: 42,
-        itemName: "Flour 1kg",
-        sku: "FLR-012",
-        sentQty: 14,
-        receivedQty: 14,
-        unit: "Pkt",
-      },
-      {
-        id: 43,
-        itemName: "Biscuit Assorted",
-        sku: "BSC-040",
-        sentQty: 10,
-        receivedQty: 10,
-        unit: "Pack",
+        price: 890,
       },
     ],
   },
@@ -220,10 +202,11 @@ const smallInputClass = `
 const readOnlyInputClass = `
   h-8
   w-full
+  cursor-not-allowed
   rounded-md
   border
   border-[#E3E7E0]
-  bg-[#F6F8F5]
+  bg-[#F3F4F2]
   px-2.5
   text-xs
   font-medium
@@ -243,6 +226,7 @@ const primaryButtonClass = `
   text-xs
   font-semibold
   text-white
+  shadow-sm
   transition
   hover:bg-[#10673E]
   active:scale-[0.98]
@@ -268,41 +252,14 @@ const secondaryButtonClass = `
   active:scale-[0.98]
 `;
 
-
-// ======================================================
-// HELPERS
-// ======================================================
-
-function formatDate(iso: string): string {
-  if (!iso) {
-    return "—";
-  }
-
-  const date = new Date(iso);
-
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function getStatus(
-  sentQty: number,
-  receivedQty: number
-): ReceiveStatus {
-  if (receivedQty < sentQty) {
-    return "short";
-  }
-  if (receivedQty > sentQty) {
-    return "excess";
-  }
-  return "complete";
-}
+const typeBadgeStyles: Record<
+  DeliveryType,
+  string
+> = {
+  Factory: "bg-[#E8F5ED] text-[#0E9351]",
+  "Stock Transfer": "bg-[#F7EFD8] text-[#9A7B1F]",
+  Pricing: "bg-[#F3F4F2] text-[#66736B]",
+};
 
 
 // ======================================================
@@ -348,35 +305,14 @@ function Field({
 
 
 // ======================================================
-// STATUS BADGE
+// TYPE BADGE
 // ======================================================
 
-const statusStyles: Record<
-  ReceiveStatus,
-  { label: string; className: string }
-> = {
-  complete: {
-    label: "Complete",
-    className: "bg-[#E8F5ED] text-[#0E9351]",
-  },
-  short: {
-    label: "Short",
-    className: "bg-[#FCECEC] text-[#B84A4A]",
-  },
-  excess: {
-    label: "Excess",
-    className: "bg-[#F7EFD8] text-[#9A7B1F]",
-  },
-};
-
-function StatusBadge({
-  status,
+function TypeBadge({
+  type,
 }: {
-  status: ReceiveStatus;
+  type: DeliveryType;
 }) {
-
-  const { label, className } =
-    statusStyles[status];
 
   return (
     <span className={`
@@ -387,9 +323,9 @@ function StatusBadge({
       py-0.5
       text-[9px]
       font-semibold
-      ${className}
+      ${typeBadgeStyles[type]}
     `}>
-      {label}
+      {type}
     </span>
   );
 }
@@ -507,7 +443,8 @@ function PendingChallanModal({
                 text-[#66736B]
               ">
                 {challans.length} challans
-                awaiting receive
+                awaiting receive — click a row
+                to select
               </p>
 
             </div>
@@ -564,7 +501,7 @@ function PendingChallanModal({
                   text-[10px]
                   font-semibold
                 ">
-                  Challan No
+                  Type
                 </th>
 
                 <th className="
@@ -574,7 +511,7 @@ function PendingChallanModal({
                   text-[10px]
                   font-semibold
                 ">
-                  Date
+                  Challan No.
                 </th>
 
                 <th className="
@@ -584,27 +521,7 @@ function PendingChallanModal({
                   text-[10px]
                   font-semibold
                 ">
-                  Vendor / Source
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Total Qty
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Action
+                  Challan Time
                 </th>
 
               </tr>
@@ -617,13 +534,27 @@ function PendingChallanModal({
 
                 <tr
                   key={challan.id}
+                  onClick={() =>
+                    onSelect(challan)
+                  }
+                  title="Click to select this challan"
                   className="
+                    cursor-pointer
                     border-b
                     border-[#ECEFEA]
                     transition-colors
                     hover:bg-[#F1F8F3]
                   "
                 >
+
+                  <td className="
+                    px-3
+                    py-2.5
+                  ">
+                    <TypeBadge
+                      type={challan.type}
+                    />
+                  </td>
 
                   <td className="
                     px-3
@@ -641,57 +572,7 @@ function PendingChallanModal({
                     py-2.5
                     text-[#66736B]
                   ">
-                    {formatDate(challan.date)}
-                  </td>
-
-                  <td className="
-                    px-3
-                    py-2.5
-                    font-medium
-                    text-[#17231D]
-                  ">
-                    {challan.vendor}
-                  </td>
-
-                  <td className="
-                    px-3
-                    py-2.5
-                    text-center
-                    font-semibold
-                    tabular-nums
-                    text-[#10673E]
-                  ">
-                    {challan.totalQty}
-                  </td>
-
-                  <td className="px-3 py-2.5 text-center">
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onSelect(challan)
-                      }
-                      className="
-                        inline-flex
-                        h-7
-                        items-center
-                        justify-center
-                        gap-1
-                        rounded-md
-                        bg-[#0E9351]
-                        px-2.5
-                        text-[10px]
-                        font-semibold
-                        text-white
-                        transition
-                        hover:bg-[#10673E]
-                        active:scale-[0.98]
-                      "
-                    >
-                      <PackageCheck size={12} />
-                      Select
-                    </button>
-
+                    {challan.challanTime}
                   </td>
 
                 </tr>
@@ -747,18 +628,21 @@ function ProductReceive() {
   // ====================================================
 
   const [deliveryType, setDeliveryType] =
-    useState("Challan");
+    useState<DeliveryType | "">("");
 
   const [orderNo, setOrderNo] =
-    useState("");
+    useState("ARTSND-2608015038");
 
   const [deliveryFrom, setDeliveryFrom] =
-    useState("");
+    useState("Head Office");
 
 
   // ====================================================
-  // ITEMS STATE
+  // LOADED CHALLAN STATE
   // ====================================================
+
+  const [activeChallan, setActiveChallan] =
+    useState<PendingChallan | null>(null);
 
   const [items, setItems] =
     useState<ReceiveItem[]>([]);
@@ -805,14 +689,16 @@ function ProductReceive() {
     challan: PendingChallan
   ) => {
 
-    setDeliveryType("Challan");
+    setDeliveryType(challan.type);
     setOrderNo(challan.challanNo);
-    setDeliveryFrom(challan.vendor);
+    setDeliveryFrom(challan.deliveryFrom);
+
+    setActiveChallan(challan);
 
     setItems(
       challan.items.map((item) => ({
         ...item,
-        receivedQty: item.sentQty,
+        receivedQty: item.challanQty,
       }))
     );
   };
@@ -835,12 +721,18 @@ function ProductReceive() {
         order.toLowerCase()
     );
 
-    const challan = match ?? pendingChallans[0];
+    if (!match) {
+      showToast(
+        "No pending challan found for this order no.",
+        "error"
+      );
+      return;
+    }
 
-    loadChallan(challan);
+    loadChallan(match);
 
     showToast(
-      `Challan ${challan.challanNo} loaded`,
+      `Challan ${match.challanNo} loaded`,
       "success"
     );
   };
@@ -853,7 +745,11 @@ function ProductReceive() {
   const handleClearOrder = () => {
 
     setOrderNo("");
+    setDeliveryType("");
     setDeliveryFrom("");
+
+    setActiveChallan(null);
+    setItems([]);
   };
 
 
@@ -904,9 +800,9 @@ function ProductReceive() {
   // CALCULATIONS
   // ====================================================
 
-  const totalSentQty = items.reduce(
+  const totalChallanQty = items.reduce(
     (total, item) =>
-      total + item.sentQty,
+      total + item.challanQty,
     0
   );
 
@@ -953,31 +849,33 @@ function ProductReceive() {
     }
 
     const header = [
-      "Sl No",
-      "Item Name",
-      "Barcode/SKU",
-      "Sent Qty",
+      "Product Name",
+      "Description",
+      "Barcode",
+      "Challan Qty",
       "Received Qty",
-      "Unit",
-      "Status",
+      "Price",
     ];
 
-    const rows = items.map((item, index) => [
-      String(index + 1),
-      item.itemName,
-      item.sku,
-      String(item.sentQty),
+    const rows = items.map((item) => [
+      item.productName,
+      item.description,
+      item.barcode,
+      String(item.challanQty),
       String(item.receivedQty),
-      item.unit,
-      statusStyles[
-        getStatus(
-          item.sentQty,
-          item.receivedQty
-        )
-      ].label,
+      item.price.toFixed(2),
     ]);
 
-    const csv = [header, ...rows]
+    const totalsRow = [
+      "Total Quantity",
+      "",
+      "",
+      String(totalChallanQty),
+      String(totalReceivedQty),
+      "",
+    ];
+
+    const csv = [header, ...rows, totalsRow]
       .map((row) =>
         row
           .map((cell) =>
@@ -1076,7 +974,7 @@ function ProductReceive() {
             bg-[#10673E]
             text-white
           ">
-            <Package size={16} />
+            <PackageCheck size={16} />
           </div>
 
           <div>
@@ -1095,8 +993,8 @@ function ProductReceive() {
               text-[9px]
               text-[#66736B]
             ">
-              Goods Receipt &amp;
-              Challan Management
+              Receive goods against pending
+              challans
             </p>
 
           </div>
@@ -1166,14 +1064,28 @@ function ProductReceive() {
             <select
               value={deliveryType}
               onChange={(e) =>
-                setDeliveryType(e.target.value)
+                setDeliveryType(
+                  e.target.value as DeliveryType | ""
+                )
               }
-              className={smallInputClass}
+              className={`
+                ${smallInputClass}
+                ${deliveryType ? "" : "text-[#9AA29C]"}
+              `}
             >
-              <option>Challan</option>
-              <option>Direct Purchase</option>
-              <option>Transfer</option>
-              <option>Return</option>
+              <option value="" disabled>
+                Select delivery type
+              </option>
+
+              {deliveryTypeOptions.map((option) => (
+                <option
+                  key={option}
+                  value={option}
+                >
+                  {option}
+                </option>
+              ))}
+
             </select>
 
           </Field>
@@ -1213,7 +1125,7 @@ function ProductReceive() {
                     pr-8
                     font-mono
                   `}
-                  placeholder="e.g. CH-2026-0041"
+                  placeholder="e.g. ARTSND-2608015038"
                 />
 
                 {orderNo && (
@@ -1262,6 +1174,7 @@ function ProductReceive() {
                   text-[10px]
                   font-semibold
                   text-white
+                  shadow-sm
                   transition
                   hover:bg-[#10673E]
                   active:scale-[0.98]
@@ -1285,9 +1198,8 @@ function ProductReceive() {
 
             <input
               readOnly
-              value={
-                deliveryFrom || "No source loaded"
-              }
+              value={deliveryFrom}
+              placeholder="Load a challan"
               className={readOnlyInputClass}
             />
 
@@ -1299,7 +1211,7 @@ function ProductReceive() {
 
 
       {/* ================================================= */}
-      {/* INVENTORY RECEIVE TABLE */}
+      {/* PRODUCT TABLE */}
       {/* ================================================= */}
 
       <section className="
@@ -1309,226 +1221,168 @@ function ProductReceive() {
         flex-1
         flex-col
         overflow-hidden
-        border-b
-        border-[#DDE5DF]
         bg-white
       ">
 
-        {/* TABLE HEADER STRIP */}
+        {activeChallan ? (
 
-        <div className="
-          flex
-          h-9
-          shrink-0
-          items-center
-          justify-between
-          border-b
-          border-[#DDE5DF]
-          bg-[#F1F8F3]
-          px-[clamp(8px,1vw,16px)]
-        ">
+          <>
 
-          <div className="
-            flex
-            items-center
-            gap-2
-          ">
+            {/* TABLE HEADER STRIP */}
 
-            <PackageCheck
-              size={14}
-              className="text-[#10673E]"
-            />
-
-            <span className="
-              text-xs
-              font-semibold
-              text-[#10673E]
-            ">
-              Inventory Receive
-            </span>
-
-            <span className="
-              rounded-full
-              bg-[#E8F5ED]
-              px-2
-              py-0.5
-              text-[9px]
-              font-semibold
-              text-[#66736B]
-            ">
-              {items.length}
-            </span>
-
-          </div>
-
-          <span className="
-            text-[10px]
-            text-[#66736B]
-          ">
-            {totalReceivedQty} / {totalSentQty} units
-          </span>
-
-        </div>
-
-
-        {/* TABLE SCROLL AREA */}
-
-        <div className="
-          min-h-0
-          flex-1
-          overflow-auto
-        ">
-
-          <table className="
-            w-full
-            min-w-[720px]
-            border-collapse
-            text-xs
-          ">
-
-            <thead className="
-              sticky
-              top-0
-              z-10
-              bg-[#10673E]
-              text-white
+            <div className="
+              flex
+              h-9
+              shrink-0
+              items-center
+              justify-between
+              border-b
+              border-[#DDE5DF]
+              bg-[#F1F8F3]
+              px-[clamp(8px,1vw,16px)]
             ">
 
-              <tr>
+              <div className="
+                flex
+                items-center
+                gap-2
+              ">
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
+                <PackageCheck
+                  size={14}
+                  className="text-[#10673E]"
+                />
+
+                <span className="
+                  text-xs
                   font-semibold
+                  text-[#17231D]
                 ">
-                  Sl No
-                </th>
+                  Product Table
+                </span>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
+                <TypeBadge
+                  type={activeChallan.type}
+                />
+
+                <span className="
+                  rounded
+                  border
+                  border-[#ECEFEA]
+                  bg-white
+                  px-1.5
+                  py-0.5
+                  font-mono
+                  text-[9px]
+                  text-[#66736B]
                 ">
-                  Item Name
-                </th>
+                  {activeChallan.challanNo}
+                </span>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
+              </div>
+
+              <span className="
+                text-[10px]
+                text-[#66736B]
+              ">
+                {items.length} items · {totalReceivedQty} / {totalChallanQty} units
+              </span>
+
+            </div>
+
+
+            {/* TABLE SCROLL AREA */}
+
+            <div className="
+              min-h-0
+              flex-1
+              overflow-auto
+            ">
+
+              <table className="
+                w-full
+                min-w-[760px]
+                border-collapse
+                text-xs
+              ">
+
+                <thead className="
+                  sticky
+                  top-0
+                  z-10
+                  bg-[#10673E]
+                  text-white
                 ">
-                  Barcode / SKU
-                </th>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Sent Qty
-                </th>
+                  <tr>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Received Qty
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Unit
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Status
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {items.length === 0 ? (
-
-                <tr>
-
-                  <td
-                    colSpan={7}
-                    className="
-                      py-14
-                      text-center
-                    "
-                  >
-
-                    <div className="
-                      flex
-                      flex-col
-                      items-center
-                      justify-center
-                      text-[#9AA29C]
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
                     ">
+                      Product Name
+                    </th>
 
-                      <Boxes
-                        size={30}
-                        strokeWidth={1.5}
-                      />
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
+                    ">
+                      Description
+                    </th>
 
-                      <p className="
-                        mt-2
-                        text-xs
-                        font-medium
-                      ">
-                        No items to receive
-                      </p>
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
+                    ">
+                      Barcode
+                    </th>
 
-                      <p className="
-                        mt-1
-                        text-[10px]
-                      ">
-                        Load a challan or enter
-                        an order number
-                      </p>
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-center
+                      text-[10px]
+                      font-semibold
+                    ">
+                      Challan Qty
+                    </th>
 
-                    </div>
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-center
+                      text-[10px]
+                      font-semibold
+                    ">
+                      Received Qty
+                    </th>
 
-                  </td>
+                    <th className="
+                      px-3
+                      py-2.5
+                      text-right
+                      text-[10px]
+                      font-semibold
+                    ">
+                      Price
+                    </th>
 
-                </tr>
+                  </tr>
 
-              ) : (
+                </thead>
 
-                items.map((item, index) => {
+                <tbody>
 
-                  const status = getStatus(
-                    item.sentQty,
-                    item.receivedQty
-                  );
-
-                  return (
+                  {items.map((item) => (
 
                     <tr
                       key={item.id}
@@ -1543,20 +1397,18 @@ function ProductReceive() {
                       <td className="
                         px-3
                         py-2
-                        text-center
-                        tabular-nums
-                        text-[#8A938B]
+                        font-medium
+                        text-[#17231D]
                       ">
-                        {index + 1}
+                        {item.productName}
                       </td>
 
                       <td className="
                         px-3
                         py-2
-                        font-medium
-                        text-[#17231D]
+                        text-[#66736B]
                       ">
-                        {item.itemName}
+                        {item.description}
                       </td>
 
                       <td className="
@@ -1566,7 +1418,7 @@ function ProductReceive() {
                         text-[11px]
                         text-[#66736B]
                       ">
-                        {item.sku}
+                        {item.barcode}
                       </td>
 
                       <td className="
@@ -1577,7 +1429,7 @@ function ProductReceive() {
                         tabular-nums
                         text-[#66736B]
                       ">
-                        {item.sentQty}
+                        {item.challanQty}
                       </td>
 
                       <td className="
@@ -1622,36 +1474,121 @@ function ProductReceive() {
                       <td className="
                         px-3
                         py-2
-                        text-center
-                        text-[#66736B]
+                        text-right
+                        font-medium
+                        tabular-nums
+                        text-[#17231D]
                       ">
-                        {item.unit}
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        text-center
-                      ">
-
-                        <StatusBadge
-                          status={status}
-                        />
-
+                        {item.price.toFixed(2)}
                       </td>
 
                     </tr>
+                  ))}
 
-                  );
-                })
+                </tbody>
 
-              )}
+                <tfoot className="
+                  sticky
+                  bottom-0
+                  z-10
+                  border-t-2
+                  border-[#10673E]
+                  bg-[#F1F8F3]
+                ">
 
-            </tbody>
+                  <tr>
 
-          </table>
+                    <td
+                      colSpan={3}
+                      className="
+                        px-3
+                        py-2.5
+                        text-left
+                        text-xs
+                        font-bold
+                        text-[#17231D]
+                      "
+                    >
+                      Total Quantity
+                    </td>
 
-        </div>
+                    <td className="
+                      px-3
+                      py-2.5
+                      text-center
+                      text-xs
+                      font-bold
+                      tabular-nums
+                      text-[#17231D]
+                    ">
+                      {totalChallanQty}
+                    </td>
+
+                    <td className="
+                      px-3
+                      py-2.5
+                      text-center
+                      text-xs
+                      font-bold
+                      tabular-nums
+                      text-[#10673E]
+                    ">
+                      {totalReceivedQty}
+                    </td>
+
+                    <td className="
+                      px-3
+                      py-2.5
+                    " />
+
+                  </tr>
+
+                </tfoot>
+
+              </table>
+
+            </div>
+
+          </>
+
+        ) : (
+
+          /* EMPTY STATE — NO CHALLAN LOADED */
+
+          <div className="
+            flex
+            flex-1
+            flex-col
+            items-center
+            justify-center
+            px-4
+            text-[#9AA29C]
+          ">
+
+            <Boxes
+              size={30}
+              strokeWidth={1.5}
+            />
+
+            <p className="
+              mt-2
+              text-xs
+              font-medium
+            ">
+              No challan loaded
+            </p>
+
+            <p className="
+              mt-1
+              text-[10px]
+            ">
+              Select a pending challan or enter
+              an order no. and press Load
+            </p>
+
+          </div>
+
+        )}
 
       </section>
 
@@ -1667,6 +1604,8 @@ function ProductReceive() {
         items-end
         justify-between
         gap-2
+        border-t
+        border-[#DDE5DF]
         bg-white
         px-[clamp(8px,1vw,16px)]
         py-2.5

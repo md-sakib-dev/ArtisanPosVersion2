@@ -6,12 +6,31 @@ import {
 } from "ag-grid-community";
 import { AgGridProvider, AgGridReact } from "ag-grid-react";
 import products from "../../data/products.json";
-import type { Product } from "../../types/product";
+import type { MasterProduct } from "../../types/product";
+
+// Map JSON data to MasterProduct interface
+const mappedProducts: MasterProduct[] = (products as any[]).map((p, i) => ({
+  id: i + 1,
+  prodName: p.productName ?? p.prodName ?? "",
+  barcode: p.barcode ?? "",
+  group: p.group ?? "",
+  type: p.type ?? "",
+  category: p.category ?? null,
+  style: p.style ?? null,
+  brandName: p.brandName ?? "",
+  size: p.size ?? "",
+  color: p.color ?? null,
+  unitPrice: p.price ?? p.unitPrice ?? 0,
+  disc: p.disc ?? 0,
+  vat: p.vat ?? 0,
+  productDescription: p.productDescription ?? "",
+}));
+
 const ProductReport = () => {
-  const columnDefs = useMemo<ColDef<Product>[]>(
+  const columnDefs = useMemo<ColDef<MasterProduct>[]>(
     () => [
       {
-        field: "productName",
+        field: "prodName",
         headerName: "Product Name",
         minWidth: 180,
         flex: 1.5,
@@ -75,7 +94,7 @@ const ProductReport = () => {
         floatingFilter: true,
       },
       {
-        field: "price",
+        field: "unitPrice",
         headerName: "Price",
         minWidth: 100,
         filter: "agNumberColumnFilter",
@@ -110,7 +129,7 @@ const ProductReport = () => {
     []
   );
 
-  const defaultColDef = useMemo<ColDef<Product>>(
+  const defaultColDef = useMemo<ColDef<MasterProduct>>(
     () => ({
       sortable: true,
       resizable: true,
@@ -152,10 +171,10 @@ const ProductReport = () => {
         {/* AG Grid */}
         <div className="min-h-0 flex-1">
           <AgGridProvider modules={[AllCommunityModule]}>
-            <AgGridReact<Product>
+            <AgGridReact<MasterProduct>
               className="product-report-grid"
               theme={themeBalham}
-              rowData={products as Product[]}
+              rowData={mappedProducts}
               columnDefs={columnDefs}
               defaultColDef={defaultColDef}
               animateRows={true}
