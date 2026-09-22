@@ -2,119 +2,233 @@ import React, {
   createContext,
   useContext,
   useState,
-  useCallback,
   useEffect,
 } from "react";
-import rolesData from "../data/roles.json";
-import rolePermissionsData from "../data/rolePermissions.json";
-import type { Role, RolePermissions } from "../types/role";
+
+import type { MenuItem } from "../types/menu";
+
 import { useAuth } from "./AuthContext";
 
+import { getAuthorizedMenus } from "../api/roleMenuApi";
+import type { AuthorizedMenu } from "../api/roleMenuApi";
+
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Warehouse,
+  Users,
+  Receipt,
+  BarChart3,
+  Settings,
+  Shield,
+  Target,
+  CreditCard,
+  UserPlus,
+  ClipboardList,
+  type LucideIcon,
+} from "lucide-react";
+
 interface RoleContextType {
-  currentRoleId: number;
-  currentRole: Role | undefined;
-  permissions: RolePermissions[];
-  currentMenuIds: number[];
-  setCurrentRoleId: (id: number) => void;
-  updatePermissions: (roleId: number, menuIds: number[]) => void;
+  menuItems: MenuItem[];
+  sidebarLoading: boolean;
+  sidebarError: string | null;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export const useRole = () => {
   const context = useContext(RoleContext);
+
   if (!context) {
     throw new Error("useRole must be used within a RoleProvider");
   }
+
   return context;
 };
 
-export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+
+const iconMap: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  Warehouse,
+  Users,
+  Receipt,
+  BarChart3,
+  Settings,
+  Shield,
+  Target,
+  CreditCard,
+  UserPlus,
+};
+
+/*
+ * Get the icon for an API menu.
+ *
+ * The API's menuIcon names an existing Lucide icon.
+ * Unknown names fall back to a generic existing icon.
+ */
+const getMenuIcon = (
+  menuIcon: string | null | undefined
+): LucideIcon | undefined => {
+  if (!menuIcon) {
+    return ClipboardList;
+  }
+
+
+  return iconMap[menuIcon] ?? iconMap[menuIcon.toLowerCase()] ?? ClipboardList;
+};
+
+const getMenuPath = (menuUrl: string | null | undefined) => {
+  if (!menuUrl) {
+    return undefined;
+  }
+
+  return menuUrl.startsWith("/") ? menuUrl : `/${menuUrl}`;
+};
+
+/*
+ * Build the nested MenuItem tree from the
+ * /RoleMenus/authorized response.
+ *
+ * The API is flat:
+ *
+ * menuId | parentMenuId
+ *
+ * We convert it to:
+ *
+ * Parent
+ *   ├── Child
+ *   └── Child
+ */
+const buildMenuTree = (authorizedMenus: AuthorizedMenu[]): MenuItem[] => {
+  /*
+   * Create all MenuItem objects first.
+   */
+  const menuMap = new Map<number, MenuItem>();
+
+  authorizedMenus.forEach((menu) => {
+    menuMap.set(menu.menuId, {
+      id: menu.menuId,
+      label: menu.menuName,
+      path: getMenuPath(menu.menuUrl),
+      icon: getMenuIcon(menu.menuIcon),
+      children: [],
+    });
+  });
+
+  /*
+   * Build parent/child relationships from parentMenuId.
+   */
+  const tree: MenuItem[] = [];
+
+  authorizedMenus.forEach((menu) => {
+    const currentItem = menuMap.get(menu.menuId);
+
+    if (!currentItem) {
+      return;
+    }
+
+    /*
+     * No parent = root menu.
+     */
+    if (menu.parentMenuId === null || menu.parentMenuId === undefined) {
+      tree.push(currentItem);
+      return;
+    }
+
+    /*
+     * Has parent.
+     */
+    const parentItem = menuMap.get(menu.parentMenuId);
+
+    if (parentItem) {
+      parentItem.children = [...(parentItem.children ?? []), currentItem];
+    } else {
+      /*
+       * If the parent isn't in the authorized list,
+       * keep the child visible at root level instead
+       * of losing it completely.
+       */
+      tree.push(currentItem);
+    }
+  });
+
+  return tree;
+};
+
+export const RoleProvider: React.FC<{
+  children: React.ReactNode;
+}> = ({ children }) => {
   const { user } = useAuth();
 
-  // Initialize from the logged-in user's role, or fall back to localStorage / default
-  const [currentRoleId, setCurrentRoleIdState] = useState<number>(() => {
-    if (user) return user.roleId;
-    const saved = localStorage.getItem("currentRoleId");
-    return saved ? parseInt(saved, 10) : 1;
-  });
+  /*
+   * This is the menu structure that Sidebar uses,
+   * built from GET /RoleMenus/authorized.
+   */
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [sidebarLoading, setSidebarLoading] = useState<boolean>(true);
+  const [sidebarError, setSidebarError] = useState<string | null>(null);
 
-  // When user changes (login/logout), update the role
+  /*
+   * Load the authorized menus for the logged-in user.
+   */
   useEffect(() => {
-    if (user) {
-      setCurrentRoleIdState(user.roleId);
-      localStorage.setItem("currentRoleId", String(user.roleId));
-    }
-  }, [user]);
+    let cancelled = false;
 
-  const [permissions, setPermissions] = useState<RolePermissions[]>(() => {
-    const saved = localStorage.getItem("rolePermissions");
-    if (saved) {
-      try {
-        const cached = JSON.parse(saved) as RolePermissions[];
-        // Merge: ensure any new menuIds from the JSON source are included
-        return rolePermissionsData.map((def) => {
-          const existing = cached.find((c) => c.roleId === def.roleId);
-          if (existing) {
-            const mergedIds = Array.from(new Set([...existing.menuIds, ...def.menuIds]));
-            return { ...existing, menuIds: mergedIds };
-          }
-          return def;
-        });
-      } catch {
-        return rolePermissionsData;
+    const loadAuthorizedMenus = async () => {
+      if (!user) {
+        setMenuItems([]);
+        setSidebarLoading(false);
+        setSidebarError(null);
+        return;
       }
-    }
-    return rolePermissionsData;
-  });
 
-  const currentRole = rolesData.find((r) => r.id === currentRoleId);
-  const currentPerm = permissions.find((p) => p.roleId === currentRoleId);
-  const currentMenuIds = currentPerm?.menuIds ?? [];
+      setSidebarLoading(true);
+      setSidebarError(null);
 
-  const handleSetCurrentRoleId = useCallback((id: number) => {
-    setCurrentRoleIdState(id);
-    localStorage.setItem("currentRoleId", String(id));
-  }, []);
+      try {
+        const authorizedMenus = await getAuthorizedMenus();
 
-  const updatePermissions = useCallback(
-    (roleId: number, menuIds: number[]) => {
-      setPermissions((prev) => {
-        const existing = prev.find((p) => p.roleId === roleId);
-        const role = rolesData.find((r) => r.id === roleId);
-        let next: RolePermissions[];
-        if (existing) {
-          next = prev.map((p) =>
-            p.roleId === roleId ? { ...p, menuIds } : p
-          );
-        } else {
-          next = [
-            ...prev,
-            {
-              roleId,
-              roleName: role?.name ?? "",
-              menuIds,
-            },
-          ];
+        if (cancelled) {
+          return;
         }
-        localStorage.setItem("rolePermissions", JSON.stringify(next));
-        return next;
-      });
-    },
-    []
-  );
+
+        setMenuItems(buildMenuTree(authorizedMenus));
+        setSidebarLoading(false);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        /*
+         * Log for debugging; keep the app running.
+         * HTTP 401 is handled by the existing auth mechanism.
+         */
+        console.error("Failed to load authorized menus:", error);
+
+        setSidebarError(
+          error instanceof Error ? error.message : "Failed to load menus"
+        );
+        setMenuItems([]);
+        setSidebarLoading(false);
+      }
+    };
+
+    loadAuthorizedMenus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   return (
     <RoleContext.Provider
       value={{
-        currentRoleId,
-        currentRole,
-        permissions,
-        currentMenuIds,
-        setCurrentRoleId: handleSetCurrentRoleId,
-        updatePermissions,
+        menuItems,
+        sidebarLoading,
+        sidebarError,
       }}
     >
       {children}
