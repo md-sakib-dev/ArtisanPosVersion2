@@ -1,13 +1,25 @@
 import axios from "axios";
+import {getAccessToken} from "./authToken";
 const api=axios.create({
-  //baseURL: "https://mocki.io/v1/7445d5f5-ef8f-4ba9-9555-c3fdee5f1c6a", 
-  baseURL: "https://6a9d0088a1b37296ad4bc59e.mockapi.io/api/",
+  baseURL: "http://192.168.1.133:5000/api/",
 
   timeout: 10000, 
     headers: {
         "Content-Type": "application/json", 
-        "Authorization": "Bearer YOUR_API_KEY",
+       
     },
 });
+api.interceptors.request.use(
+  (config) => {
+    const token = getAccessToken();
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default api;

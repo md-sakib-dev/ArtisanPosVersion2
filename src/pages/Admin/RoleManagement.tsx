@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Shield,
   ChevronDown,
@@ -8,11 +8,13 @@ import {
   Minus,
   X,
 } from "lucide-react";
-import { menuItems } from "../../data/menuitems";
-import { useRole } from "../../contexts/RoleContext";
-import rolesData from "../../data/roles.json";
-import rolePermissionsData from "../../data/rolePermissions.json";
-import type { MenuItem } from "../../types/menu";
+import { getApplicationRoles } from "../../api/applicationRoleApi";
+import type { ApplicationRole } from "../../api/applicationRoleApi";
+import {
+  getRoleMenusByRoleId,
+  saveRoleMenus,
+} from "../../api/roleMenuApi";
+import type { RoleMenu, SaveRoleMenuItem } from "../../api/roleMenuApi";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                                */
@@ -25,24 +27,62 @@ interface MenuNode {
 }
 
 /* ------------------------------------------------------------------ */
-/* Build flat ID list & tree from nested menuItems                      */
+/* Build the menu tree from the RoleMenus API response                  */
+/* (menuId + menuName + parentMenuId) so IDs always match the backend   */
 /* ------------------------------------------------------------------ */
 
-function collectIds(items: MenuItem[]): number[] {
-  const ids: number[] = [];
-  for (const item of items) {
-    if (item.id !== undefined) ids.push(item.id);
-    if (item.children) ids.push(...collectIds(item.children));
+function buildTreeFromRoleMenus(records: RoleMenu[]): MenuNode[] {
+  const sorted = [...records].sort((a, b) => a.menuId - b.menuId);
+
+  const nodeMap = new Map<number, MenuNode>();
+  for (const record of sorted) {
+    nodeMap.set(record.menuId, {
+      id: record.menuId,
+      label: record.menuName,
+      children: [],
+    });
   }
-  return ids;
+
+  const roots: MenuNode[] = [];
+  const attached = new Set<number>();
+
+  for (const record of sorted) {
+    const node = nodeMap.get(record.menuId);
+    if (!node || attached.has(node.id)) continue;
+    attached.add(node.id);
+
+    const parentId = record.parentMenuId;
+    const parent =
+      parentId !== null && parentId !== undefined
+        ? nodeMap.get(parentId)
+        : undefined;
+
+    if (parent && parent.id !== node.id) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
 }
 
-function buildTree(items: MenuItem[]): MenuNode[] {
-  return items.map((item) => ({
-    id: item.id ?? 0,
-    label: item.label,
-    children: item.children ? buildTree(item.children) : [],
-  }));
+/* ------------------------------------------------------------------ */
+/* Collect all parent (expandable) IDs from a tree                      */
+/* ------------------------------------------------------------------ */
+
+function collectExpandableIds(nodes: MenuNode[]): Set<number> {
+  const allIds = new Set<number>();
+  const addAll = (list: MenuNode[]) => {
+    for (const n of list) {
+      if (n.children.length > 0) {
+        allIds.add(n.id);
+        addAll(n.children);
+      }
+    }
+  };
+  addAll(nodes);
+  return allIds;
 }
 
 /* ------------------------------------------------------------------ */
@@ -192,46 +232,46 @@ function findSiblings(
 /* Page                                                                 */
 /* ------------------------------------------------------------------ */
 
-const menuTree = buildTree(menuItems);
-
 export default function RoleManagement() {
-  const {
-    currentRoleId,
-    permissions,
-    currentMenuIds,
-    setCurrentRoleId,
-    updatePermissions,
-  } = useRole();
+  /* Roles loaded from GET /ApplicationRoles */
+  const [roles, setRoles] = useState<ApplicationRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [rolesError, setRolesError] = useState<string | null>(null);
 
-  // Local edit state for the selected role's permissions
-  const [localMenuIds, setLocalMenuIds] = useState<number[]>(() => [
-    ...currentMenuIds,
-  ]);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => {
-    const allIds = new Set<number>();
-    const expandAll = (nodes: MenuNode[]) => {
-      for (const n of nodes) {
-        if (n.children.length > 0) {
-          allIds.add(n.id);
-          expandAll(n.children);
-        }
-      }
-    };
-    expandAll(menuTree);
-    return allIds;
-  });
+  /* Currently selected role */
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
+
+  /* Menu permission state loaded from GET /RoleMenus/{roleId} */
+  const [localMenuIds, setLocalMenuIds] = useState<number[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+
+  /* True while the POST save request is in flight */
+  const [saving, setSaving] = useState(false);
+
+  /* Granted menu count per role (filled in as roles are loaded) */
+  const [roleMenuCounts, setRoleMenuCounts] = useState<
+    Record<number, number>
+  >({});
+
+  /* Menu tree built from the RoleMenus API response */
+  const [menuTree, setMenuTree] = useState<MenuNode[]>([]);
+
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
-  const [showJson, setShowJson] = useState(false);
+
+  /* Guards against stale RoleMenus responses when switching roles fast */
+  const fetchSeqRef = useRef(0);
 
   const selectedRole = useMemo(
-    () => rolesData.find((r) => r.id === currentRoleId),
-    [currentRoleId]
+    () => roles.find((r) => r.roleId === selectedRoleId),
+    [roles, selectedRoleId]
   );
 
-  const totalMenus = useMemo(() => collectIds(menuItems), []);
+  const totalMenus = useMemo(() => collectIdsFromNodes(menuTree), [menuTree]);
 
   const checkedIds = useMemo(() => new Set(localMenuIds), [localMenuIds]);
 
@@ -240,14 +280,144 @@ export default function RoleManagement() {
     [localMenuIds, totalMenus]
   );
 
-  /* When role changes, load that role's permissions into local state */
+  /*
+   * Load one role's menu permissions: GET /RoleMenus/{roleId}
+   * showLoading=false performs a silent refresh (used after saving)
+   * without showing the full loading overlay.
+   */
+  const loadRoleMenus = useCallback(
+    async (roleId: number, showLoading = true) => {
+    const seq = ++fetchSeqRef.current;
+
+    if (showLoading) {
+      setPermissionsLoading(true);
+      setPermissionsError(null);
+    }
+
+    try {
+      const response = await getRoleMenusByRoleId(roleId);
+
+      /* A newer request was made — ignore this stale response */
+      if (seq !== fetchSeqRef.current) return;
+
+      if (!response.success) {
+        setPermissionsError(
+          response.message || "Failed to load permissions"
+        );
+        setLocalMenuIds([]);
+        setMenuTree([]);
+        setToast({
+          message: response.message || "Failed to load permissions",
+          type: "error",
+        });
+        return;
+      }
+
+      /* data is an ARRAY directly (not data.items) */
+      const records = response.data ?? [];
+
+      /*
+       * Build the menu tree from the API records so menu IDs
+       * always match the backend (no hardcoded IDs).
+       */
+      const tree = buildTreeFromRoleMenus(records);
+      setMenuTree(tree);
+      setExpandedIds(collectExpandableIds(tree));
+
+      /* activeSts === 1 → checked, activeSts === 0 → unchecked */
+      const checked = records
+        .filter((record) => record.activeSts === 1)
+        .map((record) => record.menuId);
+
+      /* Replace completely so no previous role's state remains */
+      setLocalMenuIds(checked);
+      setRoleMenuCounts((prev) => ({
+        ...prev,
+        [roleId]: checked.length,
+      }));
+    } catch (error) {
+      if (seq !== fetchSeqRef.current) return;
+
+      const message =
+        error instanceof Error ? error.message : "Failed to load permissions";
+      setPermissionsError(message);
+      setLocalMenuIds([]);
+      setMenuTree([]);
+      setToast({ message, type: "error" });
+    } finally {
+      if (showLoading && seq === fetchSeqRef.current) {
+        setPermissionsLoading(false);
+      }
+    }
+    },
+    []
+  );
+
+  /* Load roles on mount: GET /ApplicationRoles */
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRoles = async () => {
+      setRolesLoading(true);
+      setRolesError(null);
+
+      try {
+        const response = await getApplicationRoles();
+
+        if (cancelled) return;
+
+        if (!response.success) {
+          setRolesError(response.message || "Failed to load roles");
+          setPermissionsLoading(false);
+          setToast({
+            message: response.message || "Failed to load roles",
+            type: "error",
+          });
+          return;
+        }
+
+        /* Only active roles: activeSts === 1 */
+        const activeRoles = (response.data?.items ?? []).filter(
+          (role) => role.activeSts === 1
+        );
+
+        setRoles(activeRoles);
+
+        if (activeRoles.length > 0) {
+          /* Auto-select the first role and load its permissions */
+          const firstRoleId = activeRoles[0].roleId;
+          setSelectedRoleId(firstRoleId);
+          await loadRoleMenus(firstRoleId);
+        } else {
+          setPermissionsLoading(false);
+        }
+      } catch (error) {
+        if (cancelled) return;
+
+        const message =
+          error instanceof Error ? error.message : "Failed to load roles";
+        setRolesError(message);
+        setPermissionsLoading(false);
+        setToast({ message, type: "error" });
+      } finally {
+        if (!cancelled) setRolesLoading(false);
+      }
+    };
+
+    loadRoles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRoleMenus]);
+
+  /* When role changes, load that role's permissions from the API */
   const handleRoleChange = useCallback(
     (roleId: number) => {
-      setCurrentRoleId(roleId);
-      const perm = permissions.find((p) => p.roleId === roleId);
-      setLocalMenuIds([...(perm?.menuIds ?? [])]);
+      setSelectedRoleId(roleId);
+      loadRoleMenus(roleId);
     },
-    [permissions, setCurrentRoleId]
+    [loadRoleMenus]
   );
 
   /* Toggle a single menu item */
@@ -295,7 +465,7 @@ export default function RoleManagement() {
         return Array.from(current);
       });
     },
-    []
+    [menuTree]
   );
 
   /* Toggle expand/collapse */
@@ -309,44 +479,96 @@ export default function RoleManagement() {
   }, []);
 
   /* Expand all / Collapse all */
-  const toggleAllExpand = useCallback((expand: boolean) => {
-    if (expand) {
-      const allIds = new Set<number>();
-      const addAll = (nodes: MenuNode[]) => {
-        for (const n of nodes) {
-          if (n.children.length > 0) {
-            allIds.add(n.id);
-            addAll(n.children);
-          }
-        }
-      };
-      addAll(menuTree);
-      setExpandedIds(allIds);
-    } else {
-      setExpandedIds(new Set());
-    }
-  }, []);
+  const toggleAllExpand = useCallback(
+    (expand: boolean) => {
+      if (expand) {
+        setExpandedIds(collectExpandableIds(menuTree));
+      } else {
+        setExpandedIds(new Set());
+      }
+    },
+    [menuTree]
+  );
 
   /* Select All / Deselect All */
   const handleSelectAll = useCallback((selectAll: boolean) => {
     setLocalMenuIds(selectAll ? [...totalMenus] : []);
   }, [totalMenus]);
 
-  /* Save — pushes local state into the global context */
-  const handleSave = () => {
-    updatePermissions(currentRoleId, localMenuIds);
-    setShowJson(true);
-    setToast({
-      message: `Permissions saved for "${selectedRole?.name}"`,
-      type: "success",
-    });
+  /*
+   * Save — POST /RoleMenus
+   *
+   * Builds menuList for ALL menus currently displayed
+   * (checked AND unchecked) from the current UI state,
+   * never from the original GET response.
+   */
+  const handleSave = async () => {
+    if (saving) return;
+
+    if (selectedRoleId === null) {
+      setToast({ message: "Please select a role first", type: "error" });
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      /*
+       * Include EVERY menu in the permission list.
+       * checked   → canView: true,  activeSts: 1
+       * unchecked → canView: false, activeSts: 0
+       */
+      const menuList: SaveRoleMenuItem[] = totalMenus.map((menuId) => {
+        const isChecked = checkedIds.has(menuId);
+        return {
+          menuId,
+          canView: isChecked,
+          activeSts: isChecked ? 1 : 0,
+        };
+      });
+
+      const response = await saveRoleMenus({
+        roleId: selectedRoleId,
+        menuList,
+      });
+
+      if (!response.success) {
+        /* Keep checkbox state so the user can retry */
+        setToast({
+          message: response.message || "Failed to save permissions",
+          type: "error",
+        });
+        return;
+      }
+
+      setToast({
+        message:
+          response.message ||
+          `Permissions saved for "${selectedRole?.roleName ?? "role"}"`,
+        type: "success",
+      });
+
+      /*
+       * Silently refresh the selected role's permissions so the
+       * UI reflects the server's saved state. The selected role
+       * stays selected and the page does not navigate away.
+       */
+      await loadRoleMenus(selectedRoleId, false);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save permissions";
+      setToast({ message, type: "error" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  /* Reset to initial dummy data */
+  /* Reset — reload the selected role's permissions from the API */
   const handleReset = () => {
-    const init = rolePermissionsData.find((p) => p.roleId === currentRoleId);
-    setLocalMenuIds([...(init?.menuIds ?? [])]);
-    setToast({ message: "Permissions reset to default", type: "success" });
+    if (selectedRoleId !== null) {
+      loadRoleMenus(selectedRoleId);
+      setToast({ message: "Permissions reloaded from server", type: "success" });
+    }
   };
 
   return (
@@ -394,48 +616,63 @@ export default function RoleManagement() {
                 </h2>
               </div>
 
-              <div className="space-y-2">
-                {rolesData.map((role) => {
-                  const isSelected = role.id === currentRoleId;
-                  const rolePerm = permissions.find(
-                    (p) => p.roleId === role.id
-                  );
-                  const permCount = rolePerm?.menuIds.length ?? 0;
-                  return (
-                    <button
-                      key={role.id}
-                      onClick={() => handleRoleChange(role.id)}
-                      className={`w-full rounded-lg border p-3 text-left transition-all ${
-                        isSelected
-                          ? "border-[#10673E] bg-[#E8F5ED] shadow-sm"
-                          : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB] hover:bg-[#F9FAFB]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`text-[13px] font-semibold ${
-                            isSelected ? "text-[#10673E]" : "text-[#1F2937]"
-                          }`}
-                        >
-                          {role.name}
-                        </span>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                            isSelected
-                              ? "bg-[#10673E]/15 text-[#10673E]"
-                              : "bg-[#F1F5F9] text-[#64748B]"
-                          }`}
-                        >
-                          {permCount}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11.5px] text-[#94A3B8]">
-                        {role.description}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
+              {rolesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-[13px] text-[#6B7280]">
+                    Loading roles...
+                  </span>
+                </div>
+              ) : rolesError ? (
+                <div className="py-8 text-center">
+                  <p className="text-[13px] text-[#E53E3E]">{rolesError}</p>
+                </div>
+              ) : roles.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-[13px] text-[#6B7280]">
+                    No active roles found
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {roles.map((role) => {
+                    const isSelected = role.roleId === selectedRoleId;
+                    const permCount = roleMenuCounts[role.roleId] ?? 0;
+                    return (
+                      <button
+                        key={role.roleId}
+                        onClick={() => handleRoleChange(role.roleId)}
+                        className={`w-full rounded-lg border p-3 text-left transition-all ${
+                          isSelected
+                            ? "border-[#10673E] bg-[#E8F5ED] shadow-sm"
+                            : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB] hover:bg-[#F9FAFB]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[13px] font-semibold ${
+                              isSelected ? "text-[#10673E]" : "text-[#1F2937]"
+                            }`}
+                          >
+                            {role.roleName}
+                          </span>
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                              isSelected
+                                ? "bg-[#10673E]/15 text-[#10673E]"
+                                : "bg-[#F1F5F9] text-[#64748B]"
+                            }`}
+                          >
+                            {permCount}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11.5px] text-[#94A3B8]">
+                          {role.roleDescription ?? ""}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Summary */}
               <div className="mt-5 rounded-lg bg-[#F8FAFC] p-3">
@@ -484,7 +721,7 @@ export default function RoleManagement() {
                   </h2>
                   {selectedRole && (
                     <span className="rounded-md bg-[#10673E]/10 px-2.5 py-1 text-[11px] font-semibold text-[#10673E]">
-                      {selectedRole.name}
+                      {selectedRole.roleName}
                     </span>
                   )}
                 </div>
@@ -519,17 +756,37 @@ export default function RoleManagement() {
 
               {/* Menu Tree */}
               <div className="max-h-[calc(100vh-320px)] overflow-y-auto p-4">
-                {menuTree.map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    checkedIds={checkedIds}
-                    expandedIds={expandedIds}
-                    onToggle={handleToggle}
-                    onExpand={handleExpand}
-                    depth={0}
-                  />
-                ))}
+                {permissionsLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <span className="text-[13px] text-[#6B7280]">
+                      Loading permissions...
+                    </span>
+                  </div>
+                ) : permissionsError ? (
+                  <div className="py-16 text-center">
+                    <p className="text-[13px] text-[#E53E3E]">
+                      {permissionsError}
+                    </p>
+                  </div>
+                ) : menuTree.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <p className="text-[13px] text-[#6B7280]">
+                      No menus found
+                    </p>
+                  </div>
+                ) : (
+                  menuTree.map((node) => (
+                    <TreeNode
+                      key={node.id}
+                      node={node}
+                      checkedIds={checkedIds}
+                      expandedIds={expandedIds}
+                      onToggle={handleToggle}
+                      onExpand={handleExpand}
+                      depth={0}
+                    />
+                  ))
+                )}
               </div>
 
               {/* Action Bar */}
@@ -537,7 +794,7 @@ export default function RoleManagement() {
                 <p className="text-[12px] text-[#94A3B8]">
                   {grantedCount} of {totalMenus.length} menus granted for{" "}
                   <span className="font-medium text-[#374151]">
-                    {selectedRole?.name}
+                    {selectedRole?.roleName}
                   </span>
                 </p>
                 <div className="flex items-center gap-3">
@@ -549,68 +806,26 @@ export default function RoleManagement() {
                   </button>
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-2 rounded-lg bg-[#10673E] px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md"
+                    disabled={saving}
+                    className="flex items-center gap-2 rounded-lg bg-[#10673E] px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:-translate-y-0 disabled:hover:shadow-sm"
                   >
-                    <Save size={16} />
-                    Save Permissions
+                    {saving ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={16} />
+                        Save Permissions
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
-        {/* JSON Preview Modal */}
-        {showJson && selectedRole && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            style={{ animation: "fade-up 0.2s ease both" }}
-            onClick={() => setShowJson(false)}
-          >
-            <div
-              className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-[#E5E7EB] px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E]">
-                    <Shield size={14} />
-                  </div>
-                  <h2 className="text-[15px] font-bold text-[#1F2937]">
-                    Saved Permissions JSON
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setShowJson(false)}
-                  className="text-[#94A3B8] hover:text-[#64748B] transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-5">
-                <pre className="overflow-x-auto rounded-lg bg-[#1E293B] p-4 text-[13px] leading-relaxed text-[#E2E8F0]">
-                  {JSON.stringify(
-                    {
-                      roleId: currentRoleId,
-                      roleName: selectedRole.name,
-                      menuIds: localMenuIds,
-                    },
-                    null,
-                    2
-                  )}
-                </pre>
-              </div>
-              <div className="flex items-center justify-end border-t border-[#E5E7EB] px-5 py-3">
-                <button
-                  onClick={() => setShowJson(false)}
-                  className="rounded-lg border border-[#D1D5DB] bg-white px-4 py-2 text-[13px] font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB]"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

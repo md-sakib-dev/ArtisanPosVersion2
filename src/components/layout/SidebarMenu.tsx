@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
-import type { MenuItem } from "../../types/menu";
+
+import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { useRole } from "../../contexts/RoleContext";
+import type { MenuItem } from "../../types/menu";
 
 interface SidebarMenuProps {
   item: MenuItem;
@@ -16,146 +15,92 @@ function SidebarMenu({
   setIsCollapsed,
 }: SidebarMenuProps) {
   const location = useLocation();
-  const { currentMenuIds } = useRole();
-  const permitted = new Set(currentMenuIds);
 
-  // Filter children based on permissions
-  const visibleChildren = (item.children ?? []).filter(
-    (child) => child.id !== undefined && permitted.has(child.id)
+  const hasChildren =
+    !!item.children && item.children.length > 0;
+
+  /*
+   * Check whether one of this item's children
+   * is currently active.
+   */
+  const hasActiveChild =
+    hasChildren &&
+    item.children!.some(
+      (child) =>
+        child.path &&
+        location.pathname.startsWith(child.path)
+    );
+
+  const [isOpen, setIsOpen] = useState(
+    hasActiveChild || location.pathname === item.path
   );
 
-  const hasChildren = visibleChildren.length > 0;
-  const hasPath = Boolean(item.path);
-
-  const isChildActive = visibleChildren.some(
-    (child) => child.path === location.pathname
-  );
-
-  const isParentActive = hasPath && item.path === location.pathname;
-
-  const [isOpen, setIsOpen] = useState(isChildActive || isParentActive);
-
-  useEffect(() => {
-    if (isChildActive || isParentActive) {
-      setIsOpen(true);
-    }
-  }, [isChildActive, isParentActive]);
-
-  const handleParentClick = () => {
+  /*
+   * Toggle submenu.
+   */
+  const handleToggle = () => {
     if (isCollapsed) {
       setIsCollapsed(false);
       setIsOpen(true);
-    } else {
-      setIsOpen(!isOpen);
+      return;
     }
+
+    setIsOpen((prev) => !prev);
   };
 
-  /* --------------------------------------------------------------- */
-  /* Parent with BOTH path AND children: split into nav link + toggle  */
-  /* --------------------------------------------------------------- */
-  if (hasPath && hasChildren) {
-    return (
-      <div>
-        <div className="flex items-center">
-          {/* Navigation part — clicking goes to the parent path */}
-          <NavLink
-            to={item.path ?? "#"}
-            className={({ isActive }) =>
-              `flex-1 flex items-center gap-3 py-3 rounded-lg transition-all duration-200 ${
-                isCollapsed ? "justify-center px-2" : "px-4"
-              } ${
-                isActive
-                  ? "bg-[#E8F5ED] text-[#10673E]"
-                  : "hover:bg-white/10"
-              }`
-            }
-          >
-            <item.icon size={20} />
-            {!isCollapsed && (
-              <span className="flex-1 text-left text-sm">{item.label}</span>
-            )}
-          </NavLink>
+  /*
+   * Render icon safely.
+   */
+  const Icon = item.icon;
 
-          {/* Expand/collapse toggle — only when not collapsed */}
-          {!isCollapsed && (
-            <button
-              onClick={handleParentClick}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 transition-colors mr-1"
-            >
-              <ChevronDown
-                size={16}
-                className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-          )}
-        </div>
-
-        {/* Children */}
-        {!isCollapsed && isOpen && (
-          <div className="ml-8 mt-1 space-y-1">
-            {visibleChildren.map((child) => (
-              <NavLink
-                key={child.label}
-                to={child.path ?? "#"}
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                    isActive
-                      ? "bg-[#E8F5ED] text-[#10673E]"
-                      : "text-white/80 hover:bg-white/10"
-                  }`
-                }
-              >
-                <child.icon size={16} />
-                <span>{child.label}</span>
-              </NavLink>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* --------------------------------------------------------------- */
-  /* Parent with children only (no path) — original toggle behavior   */
-  /* --------------------------------------------------------------- */
+  /*
+   * Parent menu with children.
+   *
+   * Clicking it only expands/collapses the
+   * children — it never navigates.
+   *
+   * Example:
+   *
+   * Reports
+   *   ├── Sales Report
+   *   └── Stock Report
+   */
   if (hasChildren) {
     return (
       <div>
         <button
-          onClick={handleParentClick}
-          className={`w-full flex items-center gap-3 py-3 rounded-lg hover:bg-white/10 transition-all duration-200 ${
-            isCollapsed ? "justify-center px-2" : "px-4"
-          }`}
+          type="button"
+          onClick={handleToggle}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200"
         >
-          <item.icon size={20} />
+          {Icon && <Icon size={20} />}
+
           {!isCollapsed && (
-            <span className="flex-1 text-left text-sm">{item.label}</span>
-          )}
-          {!isCollapsed && (
-            <ChevronDown
-              size={16}
-              className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
-            />
+            <>
+              <span className="flex-1 text-left text-sm font-medium">
+                {item.label}
+              </span>
+
+              <span
+                className={`transition-transform duration-200 ${
+                  isOpen ? "rotate-90" : ""
+                }`}
+              >
+                ›
+              </span>
+            </>
           )}
         </button>
 
         {!isCollapsed && isOpen && (
-          <div className="ml-8 mt-1 space-y-1">
-            {visibleChildren.map((child) => (
-              <NavLink
-                key={child.label}
-                to={child.path ?? "#"}
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                    isActive
-                      ? "bg-[#E8F5ED] text-[#10673E]"
-                      : "text-white/80 hover:bg-white/10"
-                  }`
-                }
-              >
-                <child.icon size={16} />
-                <span>{child.label}</span>
-              </NavLink>
+          <div className="ml-4 mt-1 space-y-1">
+            {item.children!.map((child) => (
+              <SidebarMenu
+                key={child.id}
+                item={child}
+                isCollapsed={isCollapsed}
+                setIsCollapsed={setIsCollapsed}
+              />
             ))}
           </div>
         )}
@@ -163,26 +108,35 @@ function SidebarMenu({
     );
   }
 
-  /* --------------------------------------------------------------- */
-  /* Leaf item — normal NavLink                                      */
-  /* --------------------------------------------------------------- */
+  /*
+   * Normal leaf menu.
+   */
   return (
     <NavLink
-      to={item.path ?? "#"}
+      to={item.path || "#"}
+      onClick={() => {
+        if (isCollapsed) {
+          setIsCollapsed(false);
+        }
+      }}
       className={({ isActive }) =>
-        `w-full flex items-center gap-3 py-3 rounded-lg transition-all duration-200 ${
-          isCollapsed ? "justify-center px-2" : "px-4"
-        } ${
-          isActive ? "bg-[#E8F5ED] text-[#10673E]" : "hover:bg-white/10"
+        `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+          isActive
+            ? "bg-white/15 text-white"
+            : "text-white/80 hover:bg-white/10 hover:text-white"
         }`
       }
     >
-      <item.icon size={20} />
+      {Icon && <Icon size={20} />}
+
       {!isCollapsed && (
-        <span className="flex-1 text-left text-sm">{item.label}</span>
+        <span className="text-sm font-medium">
+          {item.label}
+        </span>
       )}
     </NavLink>
   );
 }
 
 export default SidebarMenu;
+
