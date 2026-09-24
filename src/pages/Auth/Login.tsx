@@ -38,11 +38,14 @@ const Login = () => {
           roleName: result.data.roleCode,
         };
 
-      
         login(
           authUser,
           result.data.token,
-          result.data.expiresAt
+          result.data.expiresAt,
+          {
+            refreshToken: result.data.refreshToken,
+            refreshTokenExpiresAt: result.data.refreshTokenExpiresAt,
+          }
         );
 
         console.log("Login successful. Redirecting to dashboard...");

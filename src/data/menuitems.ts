@@ -9,6 +9,7 @@ import {
   Settings,
   PackageCheck,
   RotateCcw,
+  Undo2,
   Gift,
   ArrowLeftRight,
   Tags,
@@ -143,6 +144,12 @@ export const menuItems: MenuItem[] = [
         label: "Sales Refund",
         icon: RotateCcw,
         path: "/salesrefund",
+      },
+      {
+        id: 175,
+        label: "Product Return",
+        icon: Undo2,
+        path: "/productreturn",
       },
       {
         id: 17,

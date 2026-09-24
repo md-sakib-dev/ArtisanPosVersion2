@@ -18,6 +18,7 @@ import GiftVoucherReceive from './pages/Sales/GiftVoucherReceive'
 import StockTransfer from './pages/Products/StockTransfer'
 import VoucherTransfer from './pages/Sales/VoucherTransfer'
 import SalesRefund from './pages/Sales/SalesRefund'
+import ProductReturnRequest from './pages/Sales/ProductReturnRequest'
 import StockUpdate from './pages/Products/StockUpdate'
 import CustomerEntry from './pages/Customers/CustomerEntry'
 import ProductManagement from './pages/Products/ProductManagement'
@@ -31,6 +32,7 @@ import PaymentTypeManagement from './pages/Admin/PaymentTypeManagement'
 import BranchManagement from './pages/Admin/BranchManagement'
 import CounterManagement from './pages/Admin/CounterManagement'
 import ChangePassword from './pages/Admin/ChangePassword'
+import MenuSetup from './pages/Admin/MenuSetup'
 import ErrorPage from './pages/ErrorPage'
 
 function App() {
@@ -61,6 +63,7 @@ function App() {
             <Route path="/stocktransfer" element={<StockTransfer />} />
             <Route path="/vouchertransfer" element={<VoucherTransfer />} />
             <Route path="/salesrefund" element={<SalesRefund />} />
+            <Route path="/productreturn" element={<ProductReturnRequest />} />
             <Route path="/stockupdate" element={<StockUpdate />} />
             <Route path="/productmanagement" element={<ProductManagement />} />
             <Route path="/discounts" element={<DiscountManagement />} />
@@ -74,6 +77,7 @@ function App() {
                 <Route path="/branches" element={<BranchManagement />} />
                 <Route path="/counters" element={<CounterManagement />} />
                 <Route path="/changepassword" element={<ChangePassword />} />
+                <Route path="/menusetup" element={<MenuSetup />} />
             <Route path="*" element={<ErrorPage />} />
           </Route>
 
