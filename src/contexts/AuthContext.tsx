@@ -12,10 +12,12 @@ import {
   setAccessToken as saveAccessToken,
   clearAccessToken,
 } from "../api/authToken";
+import type { StoredSession } from "../api/sessionStore";
 import {
   saveSession,
   loadSession,
   clearSession,
+  SESSION_STORAGE_KEY,
 } from "../api/sessionStore";
 
 /*
@@ -30,6 +32,7 @@ export interface AuthUser {
   displayName: string;
   roleId: number;
   roleName: string;
+  branchId: number;
 }
 
 interface AuthContextType {
@@ -216,6 +219,57 @@ export const AuthProvider: React.FC<{
       return false;
     }
   }, [accessToken]);
+
+  /*
+   * Cross-tab session sync. Sessions live in localStorage (shared by
+   * all tabs), so keep every tab consistent:
+   *   - another tab logged out → log this tab out too
+   *   - another tab logged in  → adopt that session here (a new tab
+   *     opened after login no longer bounces to /login)
+   * The `storage` event fires only in OTHER tabs, never in the tab
+   * that made the change.
+   */
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key !== SESSION_STORAGE_KEY) return;
+
+      if (event.newValue === null) {
+        /* Session removed in another tab → end the session here */
+        clearAccessToken();
+        setAccessToken(null);
+        setUser(null);
+        setExpiresAt(null);
+        setIsAuthenticated(false);
+        refreshTokenRef.current = null;
+        refreshTokenExpiresAtRef.current = null;
+        return;
+      }
+
+      /* Session written in another tab (login, refresh, re-login) →
+         adopt it so both tabs share the same session state. */
+      try {
+        const session = JSON.parse(event.newValue) as StoredSession;
+        if (!session?.accessToken || !session.user || !session.expiresAt) {
+          return;
+        }
+
+        setUser(session.user);
+        setAccessToken(session.accessToken);
+        setExpiresAt(session.expiresAt);
+        setIsAuthenticated(true);
+        saveAccessToken(session.accessToken);
+        refreshTokenRef.current = session.refreshToken ?? null;
+        refreshTokenExpiresAtRef.current =
+          session.refreshTokenExpiresAt ?? null;
+      } catch {
+        /* Malformed payload — ignore */
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () =>
+      window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   /*
    * Boot: restore a saved session (survives page refresh), then keep

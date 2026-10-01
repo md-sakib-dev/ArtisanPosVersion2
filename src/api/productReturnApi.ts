@@ -1,4 +1,162 @@
 
+/* ------------------------------------------------------------------ */
+/* Approval: pending return requests                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One pending Product Return Request in the approval grid.
+ * Mirrors the header fields of SaveReturnPayload plus identity/timestamps.
+ */
+export interface PendingReturnRequest {
+  returnRequestId: number;
+  requestNumber: string; // e.g. PR-00001
+  customerContact: string;
+  requestBy: string;
+  requestAt: string; // ISO date-time
+  items: PendingReturnItem[];
+}
+
+/** One product line of a pending return request. */
+export interface PendingReturnItem {
+  barcode: string;
+  invoiceNumber: string;
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  discount: number; // line discount amount
+  totalPrice: number;
+  netPrice: number;
+  vat: number; // percent per product
+}
+
+/* ------------------------------------------------------------------ */
+/* Dummy data (approval)                                                */
+/* ------------------------------------------------------------------ */
+
+const DUMMY_PENDING_REQUESTS: PendingReturnRequest[] = [
+  {
+    returnRequestId: 1,
+    requestNumber: "PR-00001",
+    customerContact: "01712345678",
+    requestBy: "Sakib",
+    requestAt: "2026-09-27T10:30:00",
+    items: [
+      {
+        barcode: "0030111899",
+        invoiceNumber: "INV-001",
+        productName: "BOYS EX.TROUSER ARTISAN 10-12Y",
+        qty: 1,
+        unitPrice: 795,
+        discount: 15,
+        totalPrice: 795,
+        netPrice: 780,
+        vat: 7.5,
+      },
+      {
+        barcode: "0010084786",
+        invoiceNumber: "INV-001",
+        productName: "MEN'S EX.SHIRT ARTISAN 17.5 F/S",
+        qty: 2,
+        unitPrice: 1500,
+        discount: 0,
+        totalPrice: 3000,
+        netPrice: 3000,
+        vat: 7.5,
+      },
+    ],
+  },
+  {
+    returnRequestId: 2,
+    requestNumber: "PR-00002",
+    customerContact: "01812345678",
+    requestBy: "Rahim",
+    requestAt: "2026-09-27T11:45:00",
+    items: [
+      {
+        barcode: "0030111897",
+        invoiceNumber: "INV-002",
+        productName: "BOYS EX.TROUSER ARTISAN 10-12 Y EX.TR",
+        qty: 3,
+        unitPrice: 795,
+        discount: 50,
+        totalPrice: 2385,
+        netPrice: 2335,
+        vat: 7.5,
+      },
+    ],
+  },
+];
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Get all pending Product Return Requests (approval grid).
+ * Dummy implementation; replace with the real endpoint when ready.
+ */
+export const getPendingReturnRequests = async (): Promise<{
+  success: boolean;
+  message: string;
+  data: PendingReturnRequest[];
+}> => {
+  await delay(500);
+  return {
+    success: true,
+    message: "",
+    data: DUMMY_PENDING_REQUESTS,
+  };
+};
+
+/**
+ * Approve a pending Product Return Request.
+ * Dummy implementation; replace with the real endpoint when ready.
+ */
+export const approveReturnRequest = async (
+  returnRequestId: number
+): Promise<SaveReturnResponse> => {
+  await delay(600);
+   
+  console.log("POST ProductReturns/approve:", returnRequestId);
+  return { success: true, message: "Return request approved successfully." };
+};
+
+/**
+ * Discard (reject) a pending Product Return Request.
+ * Dummy implementation; replace with the real endpoint when ready.
+ */
+export const discardReturnRequest = async (
+  returnRequestId: number
+): Promise<SaveReturnResponse> => {
+  await delay(600);
+   
+  console.log("POST ProductReturns/discard:", returnRequestId);
+  return { success: true, message: "Return request discarded successfully." };
+};
+
+/*
+ * Real-backend versions (enable when endpoints exist):
+ *
+ * export const getPendingReturnRequests = async () => {
+ *   const response = await api.get<PendingReturnRequestsResponse>(
+ *     "ProductReturns/pending"
+ *   );
+ *   return response.data;
+ * };
+ *
+ * export const approveReturnRequest = async (returnRequestId: number) => {
+ *   const response = await api.post<SaveReturnResponse>(
+ *     `ProductReturns/${returnRequestId}/approve`
+ *   );
+ *   return response.data;
+ * };
+ *
+ * export const discardReturnRequest = async (returnRequestId: number) => {
+ *   const response = await api.post<SaveReturnResponse>(
+ *     `ProductReturns/${returnRequestId}/discard`
+ *   );
+ *   return response.data;
+ * };
+ */
+
 export interface InvoiceLine {
   barcode: string;
   productName: string;
@@ -100,8 +258,6 @@ const DUMMY_INVOICES: Invoice[] = [
   },
 ];
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /* ------------------------------------------------------------------ */
 /* API calls (dummy-backed)                                             */
 /* ------------------------------------------------------------------ */
@@ -151,7 +307,7 @@ export const saveReturnRequest = async (
     return { success: false, message: "At least one return item is required." };
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log("POST ProductReturns payload:", payload);
 
   return {

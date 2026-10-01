@@ -1,24 +1,15 @@
 import {
-  Barcode,
-  CalendarDays,
   CheckCircle2,
   CircleAlert,
+  ClipboardList,
   Gift,
-  Hash,
-  MessageSquare,
-  Save,
-  ScanLine,
+  Inbox,
+  ScanSearch,
   Trash2,
-  Wallet,
+  X,
 } from "lucide-react";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useState } from "react";
 
 
 // ======================================================
@@ -34,6 +25,13 @@ interface GiftVoucherRow {
   addedBy: string;
 }
 
+interface PendingChallan {
+  challanNo: string;
+  receivedFrom: string;
+  date: string;
+  voucherCount: number;
+}
+
 type Toast =
   | {
       message: string;
@@ -46,19 +44,69 @@ type Toast =
 // CONSTANTS
 // ======================================================
 
-const VOUCHER_DEFAULT_VALUE = 1000;
-
-const locationOptions = [
-  "Head Office",
-  "Dhaka Branch",
-  "Other",
-];
-
 const receivedFromOptions = [
   "Customer",
   "Partner",
   "Other",
 ];
+
+/*
+ * Prototype data — replace with the challan APIs once available
+ * (load challan by no / pending challan list).
+ */
+const PENDING_CHALLANS: PendingChallan[] = [
+  {
+    challanNo: "CH-2026-0011",
+    receivedFrom: "Customer",
+    date: "2026-09-20",
+    voucherCount: 4,
+  },
+  {
+    challanNo: "CH-2026-0014",
+    receivedFrom: "Partner",
+    date: "2026-09-24",
+    voucherCount: 2,
+  },
+];
+
+function buildDemoChallanRows(
+  challanNo: string
+): GiftVoucherRow[] {
+
+  const suffix = challanNo.replace(
+    /[^0-9]/g,
+    ""
+  );
+
+  const seed = Number(suffix) || 1;
+
+  return [
+    {
+      id: 1,
+      serial: `GV-${100000 + seed * 7}`,
+      validityDate: "2027-03-01",
+      originalValue: 1000,
+      status: "New",
+      addedBy: "Cashier",
+    },
+    {
+      id: 2,
+      serial: `GV-${200000 + seed * 13}`,
+      validityDate: "2027-03-01",
+      originalValue: 1000,
+      status: "New",
+      addedBy: "Cashier",
+    },
+    {
+      id: 3,
+      serial: `GV-${300000 + seed * 17}`,
+      validityDate: "2027-03-01",
+      originalValue: 500,
+      status: "New",
+      addedBy: "Cashier",
+    },
+  ];
+}
 
 
 // ======================================================
@@ -66,7 +114,7 @@ const receivedFromOptions = [
 // ======================================================
 
 const smallInputClass = `
-  h-8
+  h-9
   w-full
   rounded-md
   border
@@ -81,20 +129,6 @@ const smallInputClass = `
   focus:border-[#0E9351]
   focus:ring-2
   focus:ring-[#0E9351]/15
-`;
-
-const readOnlyInputClass = `
-  h-8
-  w-full
-  rounded-md
-  border
-  border-[#E3E7E0]
-  bg-[#F6F8F5]
-  px-2.5
-  text-xs
-  font-medium
-  text-[#66736B]
-  outline-none
 `;
 
 
@@ -120,26 +154,6 @@ function formatDate(iso: string): string {
   });
 }
 
-function addMonths(
-  iso: string,
-  months: number
-): string {
-
-  const date = iso
-    ? new Date(iso)
-    : new Date();
-
-  date.setMonth(date.getMonth() + months);
-
-  return date.toISOString().slice(0, 10);
-}
-
-function generateScanSerial(): string {
-  return `GV-${Math.floor(
-    100000 + Math.random() * 900000
-  )}`;
-}
-
 
 // ======================================================
 // FIELD
@@ -147,13 +161,11 @@ function generateScanSerial(): string {
 
 interface FieldProps {
   label: string;
-  icon?: ReactNode;
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 function Field({
   label,
-  icon,
   children,
 }: FieldProps) {
 
@@ -169,8 +181,6 @@ function Field({
         font-semibold
         text-[#66736B]
       ">
-
-        {icon}
 
         {label}
 
@@ -193,28 +203,11 @@ function GiftVoucherReceive() {
   // FORM STATE
   // ====================================================
 
-  const [serialInput, setSerialInput] =
-    useState("");
-
-  const [receiveDate, setReceiveDate] =
-    useState(() =>
-      new Date().toISOString().slice(0, 10)
-    );
-
-  const [location, setLocation] =
-    useState("");
-
   const [receivedFrom, setReceivedFrom] =
     useState("");
 
-  const [voucherValue, setVoucherValue] =
+  const [challanNo, setChallanNo] =
     useState("");
-
-  const [remarks, setRemarks] =
-    useState("");
-
-  const serialRef =
-    useRef<HTMLInputElement>(null);
 
 
   // ====================================================
@@ -224,7 +217,8 @@ function GiftVoucherReceive() {
   const [rows, setRows] =
     useState<GiftVoucherRow[]>([]);
 
-  const [nextId, setNextId] = useState(1);
+  const [loadedChallanNo, setLoadedChallanNo] =
+    useState<string | null>(null);
 
 
   // ====================================================
@@ -232,6 +226,11 @@ function GiftVoucherReceive() {
   // ====================================================
 
   const [toast, setToast] = useState<Toast>(null);
+
+  const [
+    pendingChallanOpen,
+    setPendingChallanOpen,
+  ] = useState(false);
 
 
   // ====================================================
@@ -255,89 +254,61 @@ function GiftVoucherReceive() {
 
 
   // ====================================================
-  // ADD VOUCHER
+  // LOAD CHALLAN
   // ====================================================
 
-  const handleAddVoucher = (
-    serialOverride?: string
-  ) => {
+  const handleLoad = () => {
 
-    const serial =
-      (serialOverride ?? serialInput).trim();
+    const challan = challanNo.trim();
 
-    if (!serial) {
+    if (!challan) {
       showToast(
-        "Voucher serial is required",
+        "Challan No is required",
         "error"
       );
       return;
     }
 
-    if (
-      rows.some(
-        (row) =>
-          row.serial.toLowerCase() ===
-          serial.toLowerCase()
-      )
-    ) {
+    if (!receivedFrom) {
       showToast(
-        "Voucher already added",
+        "Please select Receive From",
         "error"
       );
       return;
     }
 
-    const value =
-      Number(voucherValue) ||
-      VOUCHER_DEFAULT_VALUE;
+    /*
+     * TODO: replace with the challan API once available —
+     * fetch vouchers of `challan` and put them into `rows`.
+     */
+    const loaded = buildDemoChallanRows(challan);
 
-    setRows((previousRows) => [
-      ...previousRows,
-      {
-        id: nextId,
-        serial,
-        validityDate: addMonths(
-          receiveDate,
-          6
-        ),
-        originalValue: value,
-        status: "New",
-        addedBy: "Cashier",
-      },
-    ]);
-
-    setNextId((id) => id + 1);
-    setSerialInput("");
-    setVoucherValue("");
+    setRows(loaded);
+    setLoadedChallanNo(challan);
 
     showToast(
-      `Voucher ${serial} added`,
+      `Challan ${challan} loaded — ${loaded.length} vouchers`,
       "success"
     );
-
-    serialRef.current?.focus();
   };
 
 
   // ====================================================
-  // SCAN BARCODE
+  // PENDING CHALLAN PICKER
   // ====================================================
 
-  const handleScan = () => {
+  const handlePickPendingChallan = (
+    challan: PendingChallan
+  ) => {
 
-    if (serialInput.trim()) {
-      handleAddVoucher();
-      return;
-    }
-
-    const scanned = generateScanSerial();
+    setChallanNo(challan.challanNo);
+    setReceivedFrom(challan.receivedFrom);
+    setPendingChallanOpen(false);
 
     showToast(
-      `Barcode scanned — ${scanned}`,
+      `Challan ${challan.challanNo} selected — press Load`,
       "success"
     );
-
-    handleAddVoucher(scanned);
   };
 
 
@@ -364,52 +335,6 @@ function GiftVoucherReceive() {
       total + row.originalValue,
     0
   );
-
-
-  // ====================================================
-  // SAVE RECEIVE
-  // ====================================================
-
-  const handleSave = useCallback(() => {
-
-    if (rows.length === 0) {
-      showToast(
-        "No vouchers to receive",
-        "error"
-      );
-      return;
-    }
-
-    showToast(
-      `Received ${rows.length} vouchers (${totalValue.toFixed(2)} BDT)`,
-      "success"
-    );
-  }, [rows, totalValue, showToast]);
-
-
-  // ====================================================
-  // F4 KEYBOARD SHORTCUT
-  // ====================================================
-
-  useEffect(() => {
-
-    const onKeyDown = (event: KeyboardEvent) => {
-
-      if (event.key === "F4") {
-        event.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        onKeyDown
-      );
-    };
-  }, [handleSave]);
 
 
   // ====================================================
@@ -490,7 +415,9 @@ function GiftVoucherReceive() {
 
         <button
           type="button"
-          onClick={handleScan}
+          onClick={() =>
+            setPendingChallanOpen(true)
+          }
           className="
             inline-flex
             h-8
@@ -508,15 +435,15 @@ function GiftVoucherReceive() {
             active:scale-[0.98]
           "
         >
-          <ScanLine size={14} />
-          Scan Barcode
+          <Inbox size={14} />
+          Pending Challan
         </button>
 
       </header>
 
 
       {/* ================================================= */}
-      {/* VOUCHER DETAILS CARD */}
+      {/* CHALLAN DETAILS CARD */}
       {/* ================================================= */}
 
       <section className="
@@ -528,145 +455,15 @@ function GiftVoucherReceive() {
         py-2.5
       ">
 
-        {/* ROW 1 */}
-
         <div className="
           grid
           grid-cols-1
+          items-end
           gap-2
-          md:grid-cols-3
+          md:grid-cols-[1fr_1fr_auto_auto]
         ">
 
-          <Field
-            label="Voucher Serial No."
-            icon={<Hash size={13} />}
-          >
-
-            <div className="relative">
-
-              <input
-                ref={serialRef}
-                value={serialInput}
-                onChange={(e) =>
-                  setSerialInput(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleAddVoucher();
-                  }
-                }}
-                className={`
-                  ${smallInputClass}
-                  pr-9
-                  font-mono
-                `}
-                placeholder="Voucher Serial No."
-              />
-
-              <Barcode
-                size={14}
-                className="
-                  absolute
-                  right-2.5
-                  top-1/2
-                  -translate-y-1/2
-                  text-[#8A938B]
-                "
-              />
-
-            </div>
-
-          </Field>
-
-
-          <Field
-            label="Receive Date"
-            icon={<CalendarDays size={13} />}
-          >
-
-            <div className="relative">
-
-              <CalendarDays
-                size={14}
-                className="
-                  absolute
-                  left-2.5
-                  top-1/2
-                  -translate-y-1/2
-                  text-[#8A938B]
-                "
-              />
-
-              <input
-                type="date"
-                value={receiveDate}
-                onChange={(e) =>
-                  setReceiveDate(e.target.value)
-                }
-                className={`
-                  ${smallInputClass}
-                  pl-9
-                `}
-              />
-
-            </div>
-
-          </Field>
-
-
-          <Field
-            label="Receiving Location"
-            icon={<Gift size={13} />}
-          >
-
-            <select
-              value={location}
-              onChange={(e) =>
-                setLocation(e.target.value)
-              }
-              className={`
-                ${smallInputClass}
-                ${
-                  location
-                    ? ""
-                    : "text-[#9AA29C]"
-                }
-              `}
-            >
-              <option value="" disabled>
-                Select
-              </option>
-
-              {locationOptions.map((option) => (
-                <option
-                  key={option}
-                  value={option}
-                >
-                  {option}
-                </option>
-              ))}
-
-            </select>
-
-          </Field>
-
-        </div>
-
-
-        {/* ROW 2 */}
-
-        <div className="
-          mt-2
-          grid
-          grid-cols-1
-          gap-2
-          md:grid-cols-3
-        ">
-
-          <Field
-            label="Received From"
-            icon={<Gift size={13} />}
-          >
+          <Field label="Receive From">
 
             <select
               value={receivedFrom}
@@ -700,61 +497,29 @@ function GiftVoucherReceive() {
           </Field>
 
 
-          <Field
-            label="Voucher Value (BDT)"
-            icon={<Wallet size={13} />}
-          >
+          <Field label="Challan No">
 
             <input
-              type="number"
-              min={0}
-              value={voucherValue}
+              type="text"
+              value={challanNo}
               onChange={(e) =>
-                setVoucherValue(e.target.value)
+                setChallanNo(e.target.value)
               }
-              className={`
-                ${smallInputClass}
-                text-right
-                tabular-nums
-              `}
-              placeholder="Voucher Value (BDT)"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleLoad();
+                }
+              }}
+              className={smallInputClass}
+              placeholder="Challan No"
             />
 
           </Field>
 
-
-          <Field
-            label="Current Status"
-            icon={<CheckCircle2 size={13} />}
-          >
-
-            <input
-              readOnly
-              value="New"
-              className={`
-                ${readOnlyInputClass}
-                font-semibold
-                text-[#66736B]
-              `}
-            />
-
-          </Field>
-
-        </div>
-
-
-        {/* ACTION ROW */}
-
-        <div className="
-          mt-2.5
-          flex
-          items-center
-          justify-end
-        ">
 
           <button
             type="button"
-            onClick={handleSave}
+            onClick={handleLoad}
             className="
               inline-flex
               h-9
@@ -773,8 +538,37 @@ function GiftVoucherReceive() {
               active:scale-[0.98]
             "
           >
-            <Save size={14} />
-            SAVE RECEIVE [F4]
+            <ScanSearch size={14} />
+            Load
+          </button>
+
+
+          <button
+            type="button"
+            onClick={() =>
+              setPendingChallanOpen(true)
+            }
+            className="
+              inline-flex
+              h-9
+              items-center
+              justify-center
+              gap-1.5
+              rounded-md
+              border
+              border-[#0E9351]/40
+              bg-[#E8F5ED]
+              px-4
+              text-xs
+              font-semibold
+              text-[#10673E]
+              transition
+              hover:bg-[#D4EDDA]
+              active:scale-[0.98]
+            "
+          >
+            <Inbox size={14} />
+            Pending Challan
           </button>
 
         </div>
@@ -843,6 +637,20 @@ function GiftVoucherReceive() {
               {rows.length}
             </span>
 
+            {loadedChallanNo && (
+              <span className="
+                rounded-full
+                bg-[#2D5597]/10
+                px-2
+                py-0.5
+                text-[9px]
+                font-semibold
+                text-[#2D5597]
+              ">
+                Challan {loadedChallanNo}
+              </span>
+            )}
+
           </div>
 
           <span className="
@@ -865,7 +673,7 @@ function GiftVoucherReceive() {
 
           <table className="
             w-full
-            min-w-[780px]
+            min-w-[720px]
             border-collapse
             text-xs
           ">
@@ -933,16 +741,6 @@ function GiftVoucherReceive() {
                 <th className="
                   px-3
                   py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
-                ">
-                  Added By
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
                   text-center
                   text-[10px]
                   font-semibold
@@ -961,7 +759,7 @@ function GiftVoucherReceive() {
                 <tr>
 
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="
                       py-14
                       text-center
@@ -976,7 +774,7 @@ function GiftVoucherReceive() {
                       text-[#9AA29C]
                     ">
 
-                      <Gift
+                      <ClipboardList
                         size={30}
                         strokeWidth={1.5}
                       />
@@ -986,15 +784,16 @@ function GiftVoucherReceive() {
                         text-xs
                         font-medium
                       ">
-                        No vouchers received
+                        No challan loaded
                       </p>
 
                       <p className="
                         mt-1
                         text-[10px]
                       ">
-                        Scan a barcode or type a
-                        serial to add vouchers
+                        Enter a Challan No and press
+                        Load, or pick one from
+                        Pending Challan
                       </p>
 
                     </div>
@@ -1082,14 +881,6 @@ function GiftVoucherReceive() {
                     <td className="
                       px-3
                       py-2
-                      text-[#66736B]
-                    ">
-                      {row.addedBy}
-                    </td>
-
-                    <td className="
-                      px-3
-                      py-2
                       text-center
                     ">
 
@@ -1131,51 +922,233 @@ function GiftVoucherReceive() {
 
 
       {/* ================================================= */}
-      {/* REMARKS SECTION */}
+      {/* PENDING CHALLAN MODAL */}
       {/* ================================================= */}
 
-      <footer className="
-        shrink-0
-        bg-white
-        px-[clamp(8px,1vw,16px)]
-        py-2.5
-      ">
+      {pendingChallanOpen && (
 
-        <Field
-          label="Remarks"
-          icon={<MessageSquare size={13} />}
+        <div
+          className="
+            fixed
+            inset-0
+            z-50
+            flex
+            items-center
+            justify-center
+            bg-black/40
+            p-4
+          "
+          onClick={() =>
+            setPendingChallanOpen(false)
+          }
         >
 
-          <div className="relative">
+          <div
+            className="
+              w-full
+              max-w-lg
+              overflow-hidden
+              rounded-xl
+              bg-white
+              shadow-2xl
+            "
+            onClick={(e) => e.stopPropagation()}
+          >
 
-            <input
-              value={remarks}
-              onChange={(e) =>
-                setRemarks(e.target.value)
-              }
-              className={`
-                ${smallInputClass}
-                pr-9
-              `}
-              placeholder="Add remarks for this receive (optional)"
-            />
+            {/* Modal Header */}
 
-            <MessageSquare
-              size={14}
-              className="
-                absolute
-                right-2.5
-                top-1/2
-                -translate-y-1/2
-                text-[#8A938B]
-              "
-            />
+            <div className="
+              flex
+              items-center
+              justify-between
+              border-b
+              border-[#DDE5DF]
+              px-5
+              py-3.5
+            ">
+
+              <div className="
+                flex
+                items-center
+                gap-2
+              ">
+
+                <div className="
+                  flex
+                  h-8
+                  w-8
+                  items-center
+                  justify-center
+                  rounded-md
+                  bg-[#10673E]/10
+                  text-[#10673E]
+                ">
+                  <Inbox size={15} />
+                </div>
+
+                <div>
+
+                  <h2 className="
+                    text-sm
+                    font-semibold
+                    text-[#17231D]
+                  ">
+                    Pending Challans
+                  </h2>
+
+                  <p className="
+                    text-[10px]
+                    text-[#9AA29C]
+                  ">
+                    Select a challan to fill the form
+                  </p>
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPendingChallanOpen(false)
+                }
+                className="
+                  flex
+                  h-7
+                  w-7
+                  items-center
+                  justify-center
+                  rounded-md
+                  text-[#9AA29C]
+                  transition
+                  hover:bg-[#F1F8F3]
+                  hover:text-[#66736B]
+                "
+              >
+                <X size={16} />
+              </button>
+
+            </div>
+
+
+            {/* Modal Body */}
+
+            <div className="
+              max-h-80
+              overflow-y-auto
+            ">
+
+              {PENDING_CHALLANS.length === 0 ? (
+
+                <div className="
+                  flex
+                  flex-col
+                  items-center
+                  justify-center
+                  py-12
+                  text-[#9AA29C]
+                ">
+
+                  <Inbox
+                    size={28}
+                    strokeWidth={1.5}
+                  />
+
+                  <p className="
+                    mt-2
+                    text-xs
+                    font-medium
+                  ">
+                    No pending challans
+                  </p>
+
+                </div>
+
+              ) : (
+
+                <ul className="
+                  divide-y
+                  divide-[#ECEFEA]
+                ">
+
+                  {PENDING_CHALLANS.map((challan) => (
+
+                    <li key={challan.challanNo}>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePickPendingChallan(challan)
+                        }
+                        className="
+                          flex
+                          w-full
+                          items-center
+                          justify-between
+                          gap-3
+                          px-5
+                          py-3
+                          text-left
+                          transition
+                          hover:bg-[#F1F8F3]
+                        "
+                      >
+
+                        <span className="
+                          font-mono
+                          text-xs
+                          font-semibold
+                          text-[#17231D]
+                        ">
+                          {challan.challanNo}
+                        </span>
+
+                        <span className="
+                          flex
+                          items-center
+                          gap-3
+                          text-[10px]
+                          text-[#66736B]
+                        ">
+
+                          <span>
+                            {challan.receivedFrom}
+                          </span>
+
+                          <span>
+                            {formatDate(challan.date)}
+                          </span>
+
+                          <span className="
+                            rounded-full
+                            bg-[#E8F5ED]
+                            px-2
+                            py-0.5
+                            font-semibold
+                            text-[#0E9351]
+                          ">
+                            {challan.voucherCount} vouchers
+                          </span>
+
+                        </span>
+
+                      </button>
+
+                    </li>
+
+                  ))}
+
+                </ul>
+
+              )}
+
+            </div>
 
           </div>
 
-        </Field>
+        </div>
 
-      </footer>
+      )}
 
 
       {/* ================================================= */}

@@ -171,6 +171,7 @@ export const updateApplicationMenu = async (
   menuId: number,
   menu: ApplicationMenuCreateDto
 ): Promise<CreateApplicationMenuResponse> => {
+  console.log("Updating menu with ID:", menuId, "and data:", menu);
   const response = await api.put<CreateApplicationMenuResponse>(
     `ApplicationMenus/${menuId}`,
     menu

@@ -5,6 +5,7 @@ import {
   CircleAlert,
   ClipboardList,
   Hash,
+  Loader2,
   Package,
   Plus,
   Save,
@@ -15,10 +16,16 @@ import {
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+
+import { getCurrentStockByBarcode } from "../../api/currentStockApi";
+import { getBranchDropdown } from "../../api/branchApi";
+import { createStockTransfer } from "../../api/stockTransferApi";
+import { useAuth } from "../../contexts/AuthContext";
 
 
 // ======================================================
@@ -26,6 +33,7 @@ import {
 // ======================================================
 
 interface StockProduct {
+  productId: number;
   barcode: string;
   name: string;
   description: string;
@@ -47,61 +55,8 @@ type Toast =
 
 
 // ======================================================
-// SAMPLE PRODUCT CATALOG
+// STOCK TRANSFER (MAIN)
 // ======================================================
-
-const productCatalog: StockProduct[] = [
-  {
-    barcode: "123456789123456",
-    name: "Sample Product",
-    description: "Standard demo product — 200g pack",
-    unit: "Pcs",
-    stockQty: 500,
-  },
-  {
-    barcode: "789012",
-    name: "Product Two",
-    description: "Second demo item — 1L bottle",
-    unit: "Bottle",
-    stockQty: 120,
-  },
-  {
-    barcode: "345678",
-    name: "Product Three",
-    description: "Premium variant — 500g pack",
-    unit: "Pkt",
-    stockQty: 80,
-  },
-  {
-    barcode: "123455",
-    name: "Sample Product 2",
-    description: "Alternate pack — 1kg bag",
-    unit: "Bag",
-    stockQty: 45,
-  },
-  {
-    barcode: "999001",
-    name: "Detergent Powder 1kg",
-    description: "Washing powder — 1kg pack",
-    unit: "Pkt",
-    stockQty: 60,
-  },
-  {
-    barcode: "999002",
-    name: "Hand Soap 250ml",
-    description: "Liquid hand wash — 250ml bottle",
-    unit: "Bottle",
-    stockQty: 90,
-  },
-];
-
-const destinationOptions = [
-  "Dhaka Branch",
-  "Chittagong Branch",
-  "Sylhet Branch",
-  "Warehouse — Mirpur",
-  "Warehouse — Narayanganj",
-];
 
 
 // ======================================================
@@ -588,12 +543,72 @@ function ViewChallanModal({
 
 function StockTransfer() {
 
+  const { user } = useAuth();
+  const myBranchId = user?.branchId ?? 0;
+
+  // ====================================================
+  // PRODUCT OUT TYPE DROPDOWN (placeholder options)
+  // ====================================================
+
+  const productOutTypeOptions = [
+    { value: 1, text: "Branch Transfer" },
+    { value: 2, text: "Warehouse Transfer" },
+  ];
+
+  // ====================================================
+  // DESTINATION BRANCH DROPDOWN (from API, minus my own)
+  // ====================================================
+
+  interface BranchOption {
+    value: number;
+    text: string;
+  }
+
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBranches = async () => {
+      setBranchesLoading(true);
+
+      try {
+        const response = await getBranchDropdown();
+
+        if (cancelled) return;
+
+        /* Never offer the logged-in user's own branch as a
+           transfer destination */
+        setBranchOptions(
+          (response.data ?? []).filter(
+            (opt) => opt.value !== myBranchId
+          )
+        );
+      } catch (error) {
+        console.error("Failed to load branch dropdown:", error);
+        if (!cancelled) setBranchOptions([]);
+      } finally {
+        if (!cancelled) setBranchesLoading(false);
+      }
+    };
+
+    loadBranches();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myBranchId]);
+
   // ====================================================
   // PRODUCT ENTRY STATE
   // ====================================================
 
   const [transferTo, setTransferTo] =
-    useState("");
+    useState<string>("");
+
+  const [productOutType, setProductOutType] =
+    useState<string>("");
 
   const [barcodeInput, setBarcodeInput] =
     useState("");
@@ -603,6 +618,9 @@ function StockTransfer() {
 
   const [foundProduct, setFoundProduct] =
     useState<StockProduct | null>(null);
+
+  const [lookupLoading, setLookupLoading] =
+    useState(false);
 
   const barcodeRef =
     useRef<HTMLInputElement>(null);
@@ -628,6 +646,8 @@ function StockTransfer() {
   const [isModalOpen, setIsModalOpen] =
     useState(false);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const [toast, setToast] = useState<Toast>(null);
 
 
@@ -652,8 +672,50 @@ function StockTransfer() {
 
 
   // ====================================================
-  // BARCODE LOOKUP
+  // BARCODE LOOKUP — GET /api/CurrentStocks/by-barcode/{barcode}
   // ====================================================
+
+  const lookupBarcode = useCallback(
+    async (rawBarcode: string): Promise<StockProduct | null> => {
+
+      const barcode = rawBarcode.trim();
+
+      if (!barcode) {
+        setFoundProduct(null);
+        return null;
+      }
+
+      setLookupLoading(true);
+
+      try {
+        const response = await getCurrentStockByBarcode(barcode);
+
+        if (response.success && response.data) {
+          const product: StockProduct = {
+            productId: response.data.productId,
+            barcode: response.data.barcode,
+            name: response.data.fullName || response.data.shortName,
+            description: response.data.shortName,
+            unit: "Pcs",
+            stockQty: response.data.quantity,
+          };
+
+          setFoundProduct(product);
+          return product;
+        }
+
+        setFoundProduct(null);
+        return null;
+      } catch (error) {
+        console.error("Barcode lookup failed:", error);
+        setFoundProduct(null);
+        return null;
+      } finally {
+        setLookupLoading(false);
+      }
+    },
+    []
+  );
 
   const handleBarcodeChange = (
     value: string
@@ -661,28 +723,46 @@ function StockTransfer() {
 
     setBarcodeInput(value);
 
-    const product = productCatalog.find(
-      (item) =>
-        item.barcode === value.trim()
-    );
-
-    setFoundProduct(product ?? null);
+    /* Clear the previous product while typing; the lookup runs on
+       Enter (scan guns send Enter after the code). */
+    setFoundProduct(null);
   };
 
 
   // ====================================================
-  // ADD ITEM
+  // SEARCH — fetch product by barcode + qty
+  // ====================================================
+
+  const handleSearch = async () => {
+
+    if (!barcodeInput.trim()) {
+      showToast(
+        "Scan or type a barcode first",
+        "error"
+      );
+      barcodeRef.current?.focus();
+      return;
+    }
+
+    await lookupBarcode(barcodeInput);
+  };
+
+
+  // ====================================================
+  // ADD ITEM — validates qty against fetched stock
   // ====================================================
 
   const handleAdd = () => {
 
+    /* Add works only on a fetched product (Search must run first) */
     const product = foundProduct;
 
     if (!product) {
       showToast(
-        "Product not found — check the barcode",
+        "Search the product first",
         "error"
       );
+      barcodeRef.current?.focus();
       return;
     }
 
@@ -697,6 +777,7 @@ function StockTransfer() {
       return;
     }
 
+    /* Product is only added when qty <= stock quantity */
     if (quantity > product.stockQty) {
       showToast(
         `Only ${product.stockQty} ${product.unit} in stock`,
@@ -760,46 +841,6 @@ function StockTransfer() {
 
 
   // ====================================================
-  // SEARCH (FOCUS BARCODE)
-  // ====================================================
-
-  const handleSearch = () => {
-    barcodeRef.current?.focus();
-  };
-
-
-  // ====================================================
-  // TRANSFER QTY (TABLE)
-  // ====================================================
-
-  const handleTransferQtyChange = (
-    id: number,
-    value: string
-  ) => {
-
-    setItems((previousItems) =>
-      previousItems.map((item) => {
-
-        if (item.id !== id) {
-          return item;
-        }
-
-        const quantity =
-          Math.floor(Number(value) || 0);
-
-        return {
-          ...item,
-          transferQty: Math.min(
-            item.stockQty,
-            Math.max(1, quantity)
-          ),
-        };
-      })
-    );
-  };
-
-
-  // ====================================================
   // REMOVE ITEM
   // ====================================================
 
@@ -828,11 +869,19 @@ function StockTransfer() {
   // SAVE
   // ====================================================
 
-  const handleSave = () => {
+  const handleSave = async () => {
 
     if (items.length === 0) {
       showToast(
         "No items staged for transfer",
+        "error"
+      );
+      return;
+    }
+
+    if (!productOutType) {
+      showToast(
+        "Select a product out type first",
         "error"
       );
       return;
@@ -846,10 +895,58 @@ function StockTransfer() {
       return;
     }
 
-    showToast(
-      `Transfer saved — ${items.length} items (${totalTransferQty} units)`,
-      "success"
-    );
+    if (!myBranchId) {
+      showToast(
+        "Your user has no branch assigned",
+        "error"
+      );
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const response = await createStockTransfer({
+        master: {
+          productOutType: productOutType,
+          outFromBranchId: myBranchId,
+          outToBranchId: Number(transferTo),
+          outDate: new Date().toISOString(),
+          remarks: remarks.trim(),
+        },
+        details: items.map((item) => ({
+          productId: item.productId,
+          barcode: item.barcode,
+          sentQty: item.transferQty,
+        })),
+      });
+
+      if (!response.success) {
+        showToast(
+          response.message || "Failed to save the transfer",
+          "error"
+        );
+        return;
+      }
+
+      showToast(
+        `Transfer saved — ${items.length} items (${totalTransferQty} units)`,
+        "success"
+      );
+
+      setItems([]);
+      setRemarks("");
+      setTransferTo("");
+      setProductOutType("");
+    } catch (error) {
+      console.error("Save transfer failed:", error);
+      showToast(
+        "Unable to reach the server. Please try again.",
+        "error"
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
 
@@ -1000,14 +1097,51 @@ function StockTransfer() {
         py-2.5
       ">
 
-        {/* ROW 1 — TRANSFER TO */}
+        {/* ROW 1 — Out Type · Transfer To · Barcode · Qty · Search */}
 
         <div className="
           grid
-          grid-cols-1
+          grid-cols-2
           gap-2
-          md:grid-cols-3
+          md:grid-cols-4
+          xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,0.55fr)_auto]
         ">
+
+          <Field
+            label="Product Out Type"
+            icon={<Package size={13} />}
+          >
+
+            <select
+              value={productOutType}
+              onChange={(e) =>
+                setProductOutType(e.target.value)
+              }
+              className={`
+                ${smallInputClass}
+                ${
+                  productOutType
+                    ? ""
+                    : "text-[#9AA29C]"
+                }
+              `}
+            >
+              <option value="" disabled>
+                Select out type
+              </option>
+
+              {productOutTypeOptions.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.text}
+                </option>
+              ))}
+
+            </select>
+
+          </Field>
 
           <Field
             label="Transfer To"
@@ -1019,6 +1153,7 @@ function StockTransfer() {
               onChange={(e) =>
                 setTransferTo(e.target.value)
               }
+              disabled={branchesLoading || branchOptions.length === 0}
               className={`
                 ${smallInputClass}
                 ${
@@ -1029,35 +1164,25 @@ function StockTransfer() {
               `}
             >
               <option value="" disabled>
-                Select destination
+                {branchesLoading
+                  ? "Loading branches..."
+                  : branchOptions.length === 0
+                    ? "No other branches available"
+                    : "Select destination"}
               </option>
 
-              {destinationOptions.map((option) => (
+              {branchOptions.map((option) => (
                 <option
-                  key={option}
-                  value={option}
+                  key={option.value}
+                  value={option.value}
                 >
-                  {option}
+                  {option.text}
                 </option>
               ))}
 
             </select>
 
           </Field>
-
-        </div>
-
-
-        {/* ROW 2 — SCAN & SELECTION */}
-
-        <div className="
-          mt-2
-          grid
-          grid-cols-1
-          gap-2
-          sm:grid-cols-2
-          xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,0.7fr)_auto]
-        ">
 
           <Field
             label="Product Barcode"
@@ -1075,7 +1200,7 @@ function StockTransfer() {
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  handleAdd();
+                  void handleSearch();
                 }
               }}
               className={`
@@ -1087,35 +1212,8 @@ function StockTransfer() {
 
           </Field>
 
-
           <Field
-            label="Product Name"
-            icon={<Package size={13} />}
-          >
-
-            <input
-              readOnly
-              value={
-                foundProduct?.name ??
-                (barcodeInput.trim()
-                  ? "Product not found"
-                  : "—")
-              }
-              className={`
-                ${readOnlyInputClass}
-                ${
-                  foundProduct
-                    ? "text-[#17231D]"
-                    : ""
-                }
-              `}
-            />
-
-          </Field>
-
-
-          <Field
-            label="Transfer Quantity"
+            label="Transfer Qty"
             icon={<ArrowLeftRight size={13} />}
           >
 
@@ -1130,7 +1228,7 @@ function StockTransfer() {
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  handleAdd();
+                  void handleSearch();
                 }
               }}
               className={`
@@ -1142,15 +1240,17 @@ function StockTransfer() {
 
           </Field>
 
-
           <div className="
+            col-span-2
             flex
             items-end
+            md:col-span-1
           ">
 
             <button
               type="button"
-              onClick={handleSearch}
+              onClick={() => void handleSearch()}
+              disabled={lookupLoading}
               className="
                 inline-flex
                 h-8
@@ -1162,7 +1262,7 @@ function StockTransfer() {
                 border
                 border-[#DDE5DF]
                 bg-white
-                px-3
+                px-4
                 text-[10px]
                 font-semibold
                 text-[#10673E]
@@ -1170,9 +1270,14 @@ function StockTransfer() {
                 hover:border-[#0E9351]
                 hover:bg-[#F1F8F3]
                 active:scale-[0.98]
+                disabled:opacity-60
               "
             >
-              <Search size={13} />
+              {lookupLoading ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Search size={13} />
+              )}
               SEARCH
             </button>
 
@@ -1181,15 +1286,40 @@ function StockTransfer() {
         </div>
 
 
-        {/* ROW 3 — PRODUCT INFO & ADD */}
+        {/* ROW 2 — FETCHED PRODUCT INFO + ADD (populated by Search):
+            Product Name · Description · Stock Qty · Add */}
 
         <div className="
           mt-2
           grid
-          grid-cols-1
+          grid-cols-2
           gap-2
-          md:grid-cols-[minmax(0,1.6fr)_minmax(0,0.7fr)_auto]
+          md:grid-cols-4
+          xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_minmax(0,0.6fr)_auto]
         ">
+
+          <Field
+            label="Product Name"
+            icon={<Package size={13} />}
+          >
+
+            <input
+              readOnly
+              value={
+                foundProduct?.name ??
+                "—"
+              }
+              className={`
+                ${readOnlyInputClass}
+                ${
+                  foundProduct
+                    ? "text-[#17231D]"
+                    : ""
+                }
+              `}
+            />
+
+          </Field>
 
           <Field
             label="Product Description"
@@ -1207,9 +1337,8 @@ function StockTransfer() {
 
           </Field>
 
-
           <Field
-            label="Stock Quantity"
+            label="Stock Qty"
             icon={<Boxes size={13} />}
           >
 
@@ -1233,15 +1362,17 @@ function StockTransfer() {
 
           </Field>
 
-
           <div className="
+            col-span-2
             flex
             items-end
+            md:col-span-1
           ">
 
             <button
               type="button"
               onClick={handleAdd}
+              disabled={!foundProduct}
               className="
                 inline-flex
                 h-8
@@ -1251,13 +1382,15 @@ function StockTransfer() {
                 gap-1
                 rounded-md
                 bg-[#0E9351]
-                px-3
+                px-4
                 text-[10px]
                 font-semibold
                 text-white
                 transition
                 hover:bg-[#10673E]
                 active:scale-[0.98]
+                disabled:cursor-not-allowed
+                disabled:opacity-50
               "
             >
               <Plus size={13} />
@@ -1550,40 +1683,11 @@ function StockTransfer() {
                       px-3
                       py-2
                       text-center
+                      font-semibold
+                      tabular-nums
+                      text-[#10673E]
                     ">
-
-                      <input
-                        type="number"
-                        min={1}
-                        max={item.stockQty}
-                        value={item.transferQty}
-                        onChange={(e) =>
-                          handleTransferQtyChange(
-                            item.id,
-                            e.target.value
-                          )
-                        }
-                        className="
-                          h-7
-                          w-16
-                          rounded-md
-                          border
-                          border-[#DDE5DF]
-                          bg-white
-                          px-1.5
-                          text-center
-                          text-xs
-                          font-semibold
-                          tabular-nums
-                          text-[#17231D]
-                          outline-none
-                          transition
-                          focus:border-[#0E9351]
-                          focus:ring-2
-                          focus:ring-[#0E9351]/15
-                        "
-                      />
-
+                      {item.transferQty}
                     </td>
 
                     <td className="
@@ -1742,7 +1846,8 @@ function StockTransfer() {
 
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
+            disabled={isSaving}
             className="
               inline-flex
               h-14
@@ -1759,9 +1864,14 @@ function StockTransfer() {
               transition
               hover:bg-[#10673E]
               active:scale-[0.99]
+              disabled:opacity-60
             "
           >
-            <Save size={16} />
+            {isSaving ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Save size={16} />
+            )}
             Save
           </button>
 

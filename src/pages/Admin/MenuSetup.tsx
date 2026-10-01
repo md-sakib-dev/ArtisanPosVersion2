@@ -672,7 +672,7 @@ export default function MenuSetup() {
          the selected system's menu records. */
       const dto = {
         systemId: editingMenu ? editingMenu.systemId : systemId,
-        parentMenuId: form.isParent ? 0 : form.parentMenuId,
+        parentMenuId: form.isParent ? null : form.parentMenuId,
         menuCode: form.menuCode.trim(),
         menuName: form.menuName.trim(),
         menuUrl: form.menuUrl.trim(),

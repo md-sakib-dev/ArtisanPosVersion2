@@ -50,6 +50,7 @@ export const getBranches = async (): Promise<BranchResponse> => {
 
 /** POST /api/Branches body — mirrors backend BranchCreateDto. */
 export interface BranchCreateDto {
+  
   branchName: string;
   branchAddress: string;
   branchContact: string;
@@ -59,7 +60,7 @@ export interface BranchCreateDto {
 }
 
 /** PUT /api/Branches/{id} body (same shape as create). */
-export type BranchUpdateDto = BranchCreateDto;
+export type BranchUpdateDto =  BranchCreateDto ;
 
 export interface BranchMutationResponse {
   success: boolean;
@@ -80,9 +81,59 @@ export const updateBranch = async (
   branchId: number,
   dto: BranchUpdateDto
 ): Promise<BranchMutationResponse> => {
+  console.log("Updating branch with ID:", branchId, "and DTO:", dto);
   const response = await api.put<BranchMutationResponse>(
     `Branchs/${branchId}`,
     dto
   );
   return response.data;
+};
+
+/* ------------------------------------------------------------------ */
+/* Dropdown: branches                                                    */
+/* ------------------------------------------------------------------ */
+
+/** One option of GET /api/Dropdown/branches. */
+export interface BranchDropdownOption {
+  value: number;
+  text: string;
+}
+
+export interface BranchDropdownResponse {
+  success: boolean;
+  message: string;
+  data: BranchDropdownOption[];
+  pagination: null;
+}
+
+/**
+ * GET /api/Dropdown/branches — branch options for pickers.
+ * Tolerant of value being returned as string or number.
+ */
+export const getBranchDropdown = async (): Promise<BranchDropdownResponse> => {
+  const response = await api.get<
+    Omit<BranchDropdownResponse, "data"> & {
+      data: (string | number | BranchDropdownOption)[] | null;
+    }
+  >("Dropdown/branches");
+
+  const raw = response.data?.data ?? [];
+
+  const options: BranchDropdownOption[] = raw
+    .map((opt): BranchDropdownOption | null => {
+      if (typeof opt === "string") return null;
+      if (typeof opt === "number") return null;
+      return {
+        value: Number(opt.value),
+        text: opt.text ?? "",
+      };
+    })
+    .filter((opt): opt is BranchDropdownOption => opt !== null);
+
+  return {
+    success: response.data?.success ?? true,
+    message: response.data?.message ?? "",
+    data: options,
+    pagination: null,
+  };
 };

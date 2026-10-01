@@ -101,6 +101,7 @@ export const getCustomers = async (
   params: CustomerQueryParams = {}
 ): Promise<CustomerListResponse> => {
   const response = await api.get<CustomerListResponse>("Customers", { params });
+  console.log("getCustomers response:", response.data);
   return response.data;
 };
 

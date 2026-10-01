@@ -6,6 +6,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import SidebarLayout from './layout/SidebarLayout'
 import PosLayout from './layout/PosLayout'
 import Login from './pages/Auth/Login'
+import ServerErrorPage from './pages/Error/ServerErrorPage'
+import MaintenancePage from './pages/Error/MaintenancePage'
 import CeoDashboard from './pages/Dashboard/CeoDashboard'
 import ReportDashboard from './pages/Reports/ReportDashboard'
 import PosDashboard from './pages/Dashboard/PosDashboard'
@@ -15,10 +17,13 @@ import VoucherEntry from './pages/Sales/VoucherEntry'
 import ProductReceive from './pages/Purchase/ProductReceive'
 import FactoryReturn from './pages/Purchase/FactoryReturn'
 import GiftVoucherReceive from './pages/Sales/GiftVoucherReceive'
+import RedeemRequest from './pages/Sales/RedeemRequest'
+import RedeemRequestApproval from './pages/Sales/RedeemRequestApproval'
 import StockTransfer from './pages/Products/StockTransfer'
 import VoucherTransfer from './pages/Sales/VoucherTransfer'
 import SalesRefund from './pages/Sales/SalesRefund'
 import ProductReturnRequest from './pages/Sales/ProductReturnRequest'
+import ProductReturnApproval from './pages/Sales/ProductReturnApproval'
 import StockUpdate from './pages/Products/StockUpdate'
 import CustomerEntry from './pages/Customers/CustomerEntry'
 import ProductManagement from './pages/Products/ProductManagement'
@@ -26,6 +31,13 @@ import DiscountManagement from './pages/Products/DiscountManagement'
 import CreateUser from './pages/Admin/CreateUser'
 import LabelPrint from './pages/Products/LabelPrint'
 import ProductReport from './pages/Reports/ProductReport'
+import ProductGroupReport from './pages/Reports/ProductGroupReport'
+import ProductTypeReport from './pages/Reports/ProductTypeReport'
+import ProductCategoryReport from './pages/Reports/ProductCategoryReport'
+import ProductBrandReport from './pages/Reports/ProductBrandReport'
+import ProductSizeReport from './pages/Reports/ProductSizeReport'
+import ProductStyleReport from './pages/Reports/ProductStyleReport'
+import ProductColorReport from './pages/Reports/ProductColorReport'
 import RoleManagement from './pages/Admin/RoleManagement'
 import SalesTargetPage from './pages/Admin/SalesTargetPage'
 import PaymentTypeManagement from './pages/Admin/PaymentTypeManagement'
@@ -42,6 +54,8 @@ function App() {
         <Routes>
           {/* Login Page (Public) */}
           <Route path="/login" element={<Login />} />
+          <Route path="/server-error" element={<ServerErrorPage />} />
+          <Route path="/maintenance" element={<MaintenancePage />} />
 
           {/* Normal Application Layout (Protected) */}
           <Route
@@ -60,10 +74,13 @@ function App() {
             <Route path="/productreceive" element={<ProductReceive />} />
             <Route path="/factoryreturn" element={<FactoryReturn />} />
             <Route path="/giftvoucherreceive" element={<GiftVoucherReceive />} />
+            <Route path="/redeemrequest" element={<RedeemRequest />} />
+            <Route path="/redeemrequest-approval" element={<RedeemRequestApproval />} />
             <Route path="/stocktransfer" element={<StockTransfer />} />
             <Route path="/vouchertransfer" element={<VoucherTransfer />} />
             <Route path="/salesrefund" element={<SalesRefund />} />
             <Route path="/productreturn" element={<ProductReturnRequest />} />
+            <Route path="/productreturn-approval" element={<ProductReturnApproval />} />
             <Route path="/stockupdate" element={<StockUpdate />} />
             <Route path="/productmanagement" element={<ProductManagement />} />
             <Route path="/discounts" element={<DiscountManagement />} />
@@ -71,6 +88,13 @@ function App() {
             <Route path="/createuser" element={<CreateUser />} />
             <Route path="/labelprint" element={<LabelPrint />} />
                 <Route path="/prodreport" element={<ProductReport />} />
+                <Route path="/productgroupreport" element={<ProductGroupReport />} />
+                <Route path="/producttypereport" element={<ProductTypeReport />} />
+                <Route path="/productcategoryreport" element={<ProductCategoryReport />} />
+                <Route path="/productbrandreport" element={<ProductBrandReport />} />
+                <Route path="/productsizereport" element={<ProductSizeReport />} />
+                <Route path="/productstylereport" element={<ProductStyleReport />} />
+                <Route path="/productcolorreport" element={<ProductColorReport />} />
                 <Route path="/roles" element={<RoleManagement />} />
                 <Route path="/salestarget" element={<SalesTargetPage />} />
                 <Route path="/paymenttypes" element={<PaymentTypeManagement />} />

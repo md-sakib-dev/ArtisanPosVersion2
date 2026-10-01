@@ -10,6 +10,7 @@ export interface LoginUser {
   username: string;
   roleId: number;
   roleCode: string;
+  branchId: number;
   token: string;
   expiresAt: string;
   refreshToken: string;

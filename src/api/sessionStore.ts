@@ -4,13 +4,18 @@ import type { AuthUser } from "../contexts/AuthContext";
  * Session persistence.
  *
  * The access token / user info live in React memory while the app runs.
- * This module mirrors them into sessionStorage so a browser refresh
- * does not log the user out.
+ * This module mirrors them into localStorage so a page refresh does not
+ * log the user out AND a newly opened tab inherits the login (the
+ * previous sessionStorage kept sessions per-tab, which bounced every
+ * new tab back to the login page).
  *
- * sessionStorage (not localStorage) is used deliberately:
+ * localStorage:
  *   - survives refresh
- *   - each browser tab has its own session (matches per-tab POS tills)
- *   - closing the tab ends the session
+ *   - SHARED by all tabs of the browser — opening a new tab keeps the
+ *     user logged in (AuthContext listens for cross-tab changes so
+ *     logout / re-login stay in sync)
+ *   - survives browser restart (until the backend token expires or
+ *     the user logs out)
  *
  * NOTE: the long-lived refresh token must be an HttpOnly cookie set by
  * the backend. Storing it here would be an XSS risk — if the backend
@@ -26,11 +31,11 @@ export interface StoredSession {
   refreshTokenExpiresAt: string | null;
 }
 
-const KEY = "pos.session";
+export const SESSION_STORAGE_KEY = "pos.session";
 
 export const saveSession = (session: StoredSession): void => {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(session));
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   } catch {
     /* storage unavailable — in-memory session still works */
   }
@@ -38,7 +43,7 @@ export const saveSession = (session: StoredSession): void => {
 
 export const loadSession = (): StoredSession | null => {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as StoredSession;
   } catch {
@@ -48,7 +53,7 @@ export const loadSession = (): StoredSession | null => {
 
 export const clearSession = (): void => {
   try {
-    sessionStorage.removeItem(KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
   } catch {
     /* ignore */
   }

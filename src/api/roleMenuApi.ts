@@ -9,7 +9,8 @@ export interface RoleMenu {
   roleDescription: string;
   parentMenuId: number | null;
   canView: boolean;
-  activeSts: number;}
+  activeSts: number;
+}
 
 /**
  * Response of GET RoleMenus (all role-menu records).
@@ -49,13 +50,24 @@ export const getRoleMenus = async () => {
 };
 
 /**
- * One menu entry of the save request.
- * canView and activeSts must always be synchronized:
- * checked   → canView: true,  activeSts: 1
- * unchecked → canView: false, activeSts: 0
+ * One menu entry of the save request — the COMPLETE RoleMenu record as
+ * returned by GET /RoleMenus/{roleId}, with ONLY canView changed by the
+ * UI. activeSts stays synchronized with canView for the backend
+ * contract: checked → canView: true, activeSts: 1; unchecked →
+ * canView: false, activeSts: 0.
  */
 export interface SaveRoleMenuItem {
   menuId: number;
+  canView: boolean;
+  activeSts: number;
+}
+export interface SaveRoleMenuItem {
+  menuId: number;
+  menuName: string;
+  roleId: number;
+  roleName: string;
+  roleDescription: string;
+  parentMenuId: number | null;
   canView: boolean;
   activeSts: number;
 }

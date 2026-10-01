@@ -7,6 +7,8 @@ import {
 import { AgGridProvider, AgGridReact } from "ag-grid-react";
 import products from "../../data/products.json";
 import type { MasterProduct } from "../../types/product";
+import ExportButton from "../../components/ExportButton";
+import { useExcelExport } from "../../hooks/useExcelExport";
 
 // Map JSON data to MasterProduct interface
 const mappedProducts: MasterProduct[] = (products as any[]).map((p, i) => ({
@@ -27,6 +29,8 @@ const mappedProducts: MasterProduct[] = (products as any[]).map((p, i) => ({
 }));
 
 const ProductReport = () => {
+  const { exportToExcel, isExporting } = useExcelExport();
+
   const columnDefs = useMemo<ColDef<MasterProduct>[]>(
     () => [
       {
@@ -166,6 +170,44 @@ const ProductReport = () => {
               {products.length} products
             </p>
           </div>
+
+          <ExportButton
+            onClick={() =>
+              exportToExcel({
+                sheetName: "Products",
+                fileName: `Product-Report-${new Date().toISOString().slice(0, 10)}`,
+                headers: [
+                  "Product Name",
+                  "Barcode",
+                  "Group",
+                  "Type",
+                  "Category",
+                  "Style",
+                  "Brand Name",
+                  "Size",
+                  "Color",
+                  "Price",
+                  "Vat%",
+                  "Product Description",
+                ],
+                rows: mappedProducts.map((p) => [
+                  p.prodName,
+                  p.barcode,
+                  p.group,
+                  p.type,
+                  p.category,
+                  p.style,
+                  p.brandName,
+                  p.size,
+                  p.color,
+                  p.unitPrice,
+                  p.vat,
+                  p.productDescription,
+                ]),
+              })
+            }
+            loading={isExporting}
+          />
         </div>
 
         {/* AG Grid */}

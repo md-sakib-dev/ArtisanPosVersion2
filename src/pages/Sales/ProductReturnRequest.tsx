@@ -582,51 +582,145 @@ export default function ProductReturnRequest() {
               </div>
             </div>
 
-            {/* Row 2: Barcode + Find (under Customer Contact) */}
+            {/* Row 2: Barcode + Find + Invoice / Discount / Qty / Add —
+                one compact row so a return line can be keyed without
+                jumping between panels */}
             <div className="flex flex-wrap items-end gap-3">
-              <div className="w-full sm:max-w-[360px]">
-              <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
-                Barcode
-              </label>
-              <div className="relative">
-                <Barcode
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-                />
-                <input
-                  type="text"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleFind();
-                    }
-                  }}
-                  placeholder="Scan or enter barcode"
-                  className={`h-10 w-full rounded-lg border bg-[#F9FAFB] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15 ${
-                    searchError?.includes("Barcode")
-                      ? "border-red-400"
-                      : "border-[#D1D5DB]"
-                  }`}
-                />
+              {/* Barcode */}
+              <div className="w-full sm:w-[220px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Barcode
+                </label>
+                <div className="relative">
+                  <Barcode
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleFind();
+                      }
+                    }}
+                    placeholder="Scan or enter barcode"
+                    className={`h-10 w-full rounded-lg border bg-[#F9FAFB] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15 ${
+                      searchError?.includes("Barcode")
+                        ? "border-red-400"
+                        : "border-[#D1D5DB]"
+                    }`}
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Find */}
-            <button
-              type="button"
-              onClick={handleFind}
-              disabled={searching}
-              className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
-            >
-              {searching ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Search size={15} />
-              )}
-              Find
-            </button>
+              {/* Find */}
+              <button
+                type="button"
+                onClick={handleFind}
+                disabled={searching}
+                className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
+              >
+                {searching ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Search size={15} />
+                )}
+                Find
+              </button>
+
+              {/* Invoice Number (read-only, loads via Find) */}
+              <div className="w-[170px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Invoice Number
+                </label>
+                <div className="relative">
+                  <FileText
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    value={selectedInvoice?.invoiceNumber ?? ""}
+                    placeholder="Select via Find"
+                    tabIndex={-1}
+                    className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
+                  />
+                </div>
+              </div>
+
+              {/* Discount % (prefilled from invoice line, operator-editable) */}
+              <div className="w-[120px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Discount (%)
+                </label>
+                <div className="relative">
+                  <BadgePercent
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAdd();
+                      }
+                    }}
+                    disabled={!selectedLine}
+                    placeholder="0"
+                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Quantity */}
+              <div className="w-[100px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Qty
+                </label>
+                <div className="relative">
+                  <Hash
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    ref={qtyInputRef}
+                    type="number"
+                    min={1}
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAdd();
+                      }
+                    }}
+                    disabled={!selectedLine}
+                    placeholder="1"
+                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Add */}
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={!selectedLine || isSaving}
+                className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
+              >
+                <Plus size={15} />
+                Add
+              </button>
             </div>
           </div>
           {searchError && (
@@ -637,132 +731,37 @@ export default function ProductReturnRequest() {
           )}
         </div>
 
-        {/* -------- Invoice / Qty + Add (compact strip) -------- */}
-        <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
-          <div className="flex flex-wrap items-end gap-3 px-5 py-4">
-            {/* Invoice Number (read-only) */}
-            <div className="min-w-[180px] flex-1 sm:max-w-[240px]">
-              <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
-                Invoice Number
-              </label>
-              <div className="relative">
-                <FileText
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-                />
-                <input
-                  type="text"
-                  readOnly
-                  value={selectedInvoice?.invoiceNumber ?? ""}
-                  placeholder="Select via Find"
-                  tabIndex={-1}
-                  className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
-                />
-              </div>
-            </div>
-
-            {/* Product context (from selected line) */}
-            <div className="min-w-[220px] flex-[2]">
-              <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
-                Product
-              </label>
-              <div className="relative">
-                <Package
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-                />
-                <input
-                  type="text"
-                  readOnly
-                  value={
-                    selectedLine
-                      ? `${selectedLine.productName} — Sold: ${selectedLine.soldQty}`
-                      : ""
-                  }
-                  placeholder="Loads with the invoice"
-                  tabIndex={-1}
-                  className="h-10 w-full cursor-default truncate rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
-                />
-              </div>
-            </div>
-
-            {/* Discount % (prefilled from invoice line, operator-editable) */}
-            <div className="w-[130px]">
-              <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
-                Discount (%)
-              </label>
-              <div className="relative">
-                <BadgePercent
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
-                  value={discountPercent}
-                  onChange={(e) => setDiscountPercent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAdd();
+        {/* -------- Product context strip (loaded via Find) -------- */}
+        {(selectedLine || selectedInvoice) && (
+          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
+            <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+              {/* Product context (from selected line) */}
+              <div className="min-w-[220px] flex-1">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Product
+                </label>
+                <div className="relative">
+                  <Package
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    value={
+                      selectedLine
+                        ? `${selectedLine.productName} — Sold: ${selectedLine.soldQty}`
+                        : ""
                     }
-                  }}
-                  disabled={!selectedLine}
-                  placeholder="0"
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
-                />
+                    placeholder="Loads with the invoice"
+                    tabIndex={-1}
+                    className="h-10 w-full cursor-default truncate rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
+                  />
+                </div>
               </div>
             </div>
-
-            {/* Quantity */}
-            <div className="w-[110px]">
-              <label className="mb-1.5 flex items-center justify-between text-[12.5px] font-medium text-[#374151]">
-                Qty
-                {/* {selectedLine && (
-                  <span className="text-[10.5px] font-semibold text-[#10673E]">
-                    max {maxReturnable}
-                  </span>
-                )} */}
-              </label>
-              <div className="relative">
-                <Hash
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
-                />
-                <input
-                  ref={qtyInputRef}
-                  type="number"
-                  min={1}
-                  // max={selectedLine ? maxReturnable : undefined}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAdd();
-                    }
-                  }}
-                  disabled={!selectedLine}
-                  placeholder="1"
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              </div>
-            </div>
-
-            {/* Add */}
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={!selectedLine || isSaving}
-              className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
-            >
-              <Plus size={15} />
-              Add
-            </button>
           </div>
-        </div>
+        )}
 
         {/* -------- Return Items Table -------- */}
         <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
