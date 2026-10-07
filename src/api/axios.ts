@@ -17,6 +17,16 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    /*
+     * The API sends no Cache-Control header, so browsers may
+     * heuristically cache GET responses and show stale data.
+     * Ask the server/browser for a fresh copy every time.
+     */
+    if (!config.headers["Cache-Control"]) {
+      config.headers["Cache-Control"] = "no-cache";
+      config.headers.Pragma = "no-cache";
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

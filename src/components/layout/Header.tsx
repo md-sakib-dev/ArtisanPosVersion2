@@ -76,7 +76,7 @@ const Header = ({ isCollapsed, setIsCollapsed }: HeaderProps) => {
         >
           <Menu size={22} />
         </button>
-        <Link to="/">
+        <Link to="/dashboard">
         
         <img
           src={logo}

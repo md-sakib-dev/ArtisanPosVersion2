@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { loginApi } from "../../api/authApi";
+import { classifyApiError } from "../../api/apiError";
 import { useAuth } from "../../contexts/AuthContext";
 
 const Login = () => {
@@ -36,19 +37,25 @@ const Login = () => {
           displayName: result.data.username,
           roleId: result.data.roleId,
           roleName: result.data.roleCode,
+          branchId: result.data.branchId,
         };
 
-      
         login(
           authUser,
           result.data.token,
-          result.data.expiresAt
+          result.data.expiresAt,
+          {
+            refreshToken: result.data.refreshToken,
+            refreshTokenExpiresAt: result.data.refreshTokenExpiresAt,
+          }
         );
 
         console.log("Login successful. Redirecting to dashboard...");
 
         navigate("/dashboard", { replace: true });
       } else {
+        /* Backend reachable but login rejected (4xx-style failure) →
+           show inline error, not the server error page. */
         setError(
           result.message || "Invalid username or password."
         );
@@ -56,8 +63,36 @@ const Login = () => {
     } catch (error) {
       console.error("Login error:", error);
 
+      const apiError = classifyApiError(error);
+
+      /* Server-side problems (unreachable, timeout, 5xx) get the
+         full-screen error page; 4xx stays as an inline message. */
+      if (
+        apiError &&
+        (apiError.kind === "server-unreachable" ||
+          apiError.kind === "timeout" ||
+          apiError.kind === "server-error")
+      ) {
+        const reason =
+          apiError.kind === "timeout"
+            ? "timeout"
+            : apiError.kind === "server-unreachable"
+              ? "unreachable"
+              : "server";
+
+        const params = new URLSearchParams();
+        params.set("reason", reason);
+        if (apiError.kind === "server-error" && apiError.message) {
+          params.set("message", apiError.message);
+        }
+
+        navigate(`/server-error?${params.toString()}`, { replace: true });
+        return;
+      }
+
       setError(
-        "Unable to connect to the server. Please try again."
+        apiError?.message ??
+          "Unable to connect to the server. Please try again."
       );
     } finally {
       setIsLoading(false);

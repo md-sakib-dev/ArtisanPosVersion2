@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Monitor,
   Plus,
@@ -10,7 +10,24 @@ import {
   Globe,
   Hash,
   Wifi,
+  Building2,
+  Save,
+  AlertTriangle,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
+import { getBranchOptions, type DropdownOption } from "../../api/userApi";
+import {
+  getPOSCounters,
+  createPOSCounter,
+  updatePOSCounter,
+  type POSCounter,
+} from "../../api/counterApi";
+
+const getErrMessage = (err: unknown, fallback: string): string => {
+  const anyErr = err as { response?: { data?: { message?: string } } };
+  return anyErr?.response?.data?.message || fallback;
+};
 
 // ======================================================
 // TYPES
@@ -18,31 +35,24 @@ import {
 
 interface Counter {
   id: number;
-  counterNo: string;
+  branchId: number;
+  branchName: string;
+  counterName: string;
+  counterCode: string;
   ipAddress: string;
   macAddress: string;
-  status: "Active" | "Inactive";
 }
 
-// ======================================================
-// INITIAL DATA
-// ======================================================
-
-const INITIAL_DATA: Counter[] = [
-  { id: 1, counterNo: "1", ipAddress: "192.168.1.101", macAddress: "00:1A:2B:3C:4D:5E", status: "Active" },
-  { id: 2, counterNo: "2", ipAddress: "192.168.1.102", macAddress: "00:1A:2B:3C:4D:5F", status: "Active" },
-  { id: 3, counterNo: "3", ipAddress: "192.168.1.103", macAddress: "00:1A:2B:3C:4D:60", status: "Inactive" },
-  { id: 4, counterNo: "4", ipAddress: "192.168.1.104", macAddress: "00:1A:2B:3C:4D:61", status: "Active" },
-];
-
-const EMPTY_FORM = {
-  counterNo: "",
-  ipAddress: "",
-  macAddress: "",
-  status: "Active" as "Active" | "Inactive",
-};
-
-const COUNTER_OPTIONS = Array.from({ length: 10 }, (_, i) => String(i + 1));
+/** Map an API counter row to the page's row model. */
+const toRow = (c: POSCounter): Counter => ({
+  id: c.counterId,
+  branchId: c.branchId,
+  branchName: c.branchName ?? "",
+  counterName: c.counterName,
+  counterCode: c.counterCode,
+  ipAddress: c.ipAddress,
+  macAddress: c.macAddress,
+});
 
 // ======================================================
 // TOAST
@@ -57,7 +67,11 @@ function Toast({
   type: "success" | "error";
   onClose: () => void;
 }) {
-  useState(() => setTimeout(onClose, 3000));
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
   return (
     <div
       className={`fixed top-5 right-5 z-50 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-lg transition-all duration-300 ${
@@ -76,102 +90,578 @@ function Toast({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Counter Modal — native <dialog>                                     */
+/*                                                                     */
+/* Conditionally rendered by the parent, so form state initializes     */
+/* fresh on every mount (new entry or edit) with no reset effects.     */
+/* ------------------------------------------------------------------ */
+
+interface CounterFormState {
+  branchId: string;
+  counterName: string;
+  counterCode: string;
+  ipAddress: string;
+  macAddress: string;
+}
+
+function CounterModal({
+  editing,
+  branches,
+  branchesLoading,
+  branchesError,
+  saving,
+  onClose,
+  onSave,
+  onRetryBranches,
+}: {
+  editing: Counter | null;
+  branches: DropdownOption[];
+  branchesLoading: boolean;
+  branchesError: string | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (form: CounterFormState, editingId: number | null) => void;
+  onRetryBranches: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [form, setForm] = useState<CounterFormState>(() =>
+    editing
+      ? {
+          branchId: String(editing.branchId),
+          counterName: editing.counterName,
+          counterCode: editing.counterCode,
+          ipAddress: editing.ipAddress,
+          macAddress: editing.macAddress,
+        }
+      : { branchId: "", counterName: "", counterCode: "", ipAddress: "", macAddress: "" }
+  );
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const isEdit = Boolean(editing);
+
+  // Open the native dialog on mount (DOM only — no state updates)
+  useEffect(() => {
+    const dlg = dialogRef.current;
+    if (dlg && !dlg.open) dlg.showModal();
+  }, []);
+
+  // Cancel via Esc → route through onClose
+  useEffect(() => {
+    const dlg = dialogRef.current;
+    if (!dlg) return;
+
+    const handleCancel = (e: Event) => {
+      e.preventDefault();
+      onClose();
+    };
+
+    dlg.addEventListener("cancel", handleCancel);
+    return () => dlg.removeEventListener("cancel", handleCancel);
+  }, [onClose]);
+
+  const update = <K extends keyof CounterFormState>(
+    field: K,
+    value: CounterFormState[K]
+  ) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setFormError(null);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+
+    // ---------- VALIDATION ----------
+    if (!form.branchId) {
+      setFormError("Please select a branch.");
+      return;
+    }
+    if (!form.counterName.trim()) {
+      setFormError("Counter name is required.");
+      return;
+    }
+    if (!form.counterCode.trim()) {
+      setFormError("Counter code is required.");
+      return;
+    }
+    if (!form.ipAddress.trim()) {
+      setFormError("IP address is required.");
+      return;
+    }
+    if (!form.macAddress.trim()) {
+      setFormError("MAC address is required.");
+      return;
+    }
+
+    onSave(
+      {
+        branchId: form.branchId,
+        counterName: form.counterName.trim(),
+        counterCode: form.counterCode.trim(),
+        ipAddress: form.ipAddress.trim(),
+        macAddress: form.macAddress.trim(),
+      },
+      editing?.id ?? null
+    );
+  };
+
+  const inputClass =
+    "h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:bg-[#F9FAFB]";
+  const labelClass =
+    "mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]";
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="m-auto w-full max-w-xl rounded-2xl border border-[#E5E7EB] bg-white p-0 shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
+    >
+      <div className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between border-b border-[#E5E7EB] px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#10673E]/10 text-[#10673E]">
+              {isEdit ? <Pencil size={17} /> : <Plus size={17} />}
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-[#1F2937]">
+                {isEdit ? "Edit Counter" : "Add New Counter"}
+              </h2>
+              <p className="text-[11.5px] text-[#94A3B8]">
+                {isEdit
+                  ? `Editing ${editing?.counterName} — update details below`
+                  : "Configure a POS counter device"}
+              </p>
+            </div>
+            {isEdit && (
+              <span className="ml-1 rounded-md bg-[#F59E0B]/10 px-2 py-0.5 text-[11px] font-semibold text-[#D97706]">
+                Edit Mode
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#64748B] disabled:opacity-50"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <form onSubmit={handleSubmit} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+            {/* BRANCH */}
+            <div className="sm:col-span-2">
+              <label className={labelClass}>
+                <Building2 size={13} className="text-[#6B7280]" />
+                Branch <span className="text-[#DC2626]">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={form.branchId}
+                  onChange={(e) => update("branchId", e.target.value)}
+                  disabled={
+                    branchesLoading || !!branchesError || saving || isEdit
+                  }
+                  required
+                  className={`${inputClass} appearance-none pr-9`}
+                >
+                  <option value="">
+                    {branchesLoading
+                      ? "Loading branches..."
+                      : branchesError
+                        ? "Branches unavailable"
+                        : "Select Branch"}
+                  </option>
+                  {branches.map((b) => (
+                    <option key={b.value} value={b.value}>
+                      {b.text}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
+                  {branchesLoading ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : branchesError ? (
+                    <AlertTriangle size={14} className="text-[#D97706]" />
+                  ) : (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              {branchesError && (
+                <button
+                  type="button"
+                  onClick={onRetryBranches}
+                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#D97706] hover:text-[#B45309]"
+                >
+                  <RefreshCw size={11} />
+                  Retry loading branches
+                </button>
+              )}
+            </div>
+
+            {/* COUNTER NAME */}
+            <div>
+              <label className={labelClass}>
+                <Monitor size={13} className="text-[#6B7280]" />
+                Counter Name <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.counterName}
+                onChange={(e) => update("counterName", e.target.value)}
+                disabled={saving}
+                placeholder="e.g. Counter 1"
+                maxLength={50}
+                className={inputClass}
+              />
+            </div>
+
+            {/* COUNTER CODE */}
+            <div>
+              <label className={labelClass}>
+                <Hash size={13} className="text-[#6B7280]" />
+                Counter Code <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.counterCode}
+                onChange={(e) => update("counterCode", e.target.value)}
+                disabled={saving}
+                placeholder="e.g. C-01"
+                maxLength={20}
+                className={`${inputClass} font-mono uppercase`}
+              />
+            </div>
+
+            {/* IP ADDRESS */}
+            <div>
+              <label className={labelClass}>
+                <Globe size={13} className="text-[#6B7280]" />
+                Counter IP Address <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.ipAddress}
+                onChange={(e) => update("ipAddress", e.target.value)}
+                disabled={saving}
+                placeholder="192.168.1.100"
+                maxLength={15}
+                className={inputClass}
+              />
+            </div>
+
+            {/* MAC ADDRESS */}
+            <div>
+              <label className={labelClass}>
+                <Wifi size={13} className="text-[#6B7280]" />
+                MAC Address <span className="text-[#DC2626]">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.macAddress}
+                onChange={(e) => update("macAddress", e.target.value)}
+                disabled={saving}
+                placeholder="00:1A:2B:3C:4D:5E"
+                maxLength={17}
+                className={`${inputClass} font-mono uppercase`}
+              />
+            </div>
+
+            {/* Inline validation error */}
+            {formError && (
+              <p className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] font-medium text-red-600 sm:col-span-2">
+                <AlertTriangle size={14} />
+                {formError}
+              </p>
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="border-t border-[#E5E7EB] bg-[#FAFBFC] px-6 py-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] text-[#94A3B8]">
+                Fields marked with <span className="text-red-500">*</span> are
+                required
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="flex items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-4 py-2.5 text-[13px] font-medium text-[#6B7280] transition-all hover:bg-[#F9FAFB] hover:text-[#374151] disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 rounded-lg bg-[#10673E] px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md disabled:translate-y-0 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Save size={15} />
+                  )}
+                  {saving ? "Saving..." : isEdit ? "Update Counter" : "Save Counter"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  );
+}
+
 // ======================================================
 // PAGE
 // ======================================================
 
 export default function CounterManagement() {
-  const [data, setData] = useState<Counter[]>(INITIAL_DATA);
-  const [nextId, setNextId] = useState(5);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [data, setData] = useState<Counter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Counter | null>(null);
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // --------------------------------------------------
+  // BRANCH DROPDOWN
+  // --------------------------------------------------
+  const [branches, setBranches] = useState<DropdownOption[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(true);
+  const [branchesError, setBranchesError] = useState<string | null>(null);
+
+  const loadBranches = (): Promise<void> => {
+    setBranchesLoading(true);
+    return getBranchOptions()
+      .then((list) => {
+        setBranches(list);
+        setBranchesError(null);
+      })
+      .catch((err) => {
+        console.error("Failed to load branches:", err);
+        setBranchesError(getErrMessage(err, "Failed to load branches."));
+      })
+      .finally(() => setBranchesLoading(false));
+  };
+
+  // --------------------------------------------------
+  // DATA LOADING
+  // --------------------------------------------------
+  const fetchCounters = (): Promise<void> => {
+    setLoading(true);
+    return getPOSCounters()
+      .then((res) => {
+        if (res.success && Array.isArray(res.data)) {
+          setData(res.data.map(toRow));
+          setLoadError(null);
+        } else {
+          throw new Error(res.message || "Failed to load counters");
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load counters:", err);
+        setLoadError(
+          getErrMessage(err, "Failed to load counters. Please try again.")
+        );
+      })
+      .finally(() => setLoading(false));
+  };
+
+  /* Initial load — state updates happen inside promise callbacks. */
+  useEffect(() => {
+    let cancelled = false;
+
+    getBranchOptions()
+      .then((list) => {
+        if (cancelled) return;
+        setBranches(list);
+        setBranchesError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load branches:", err);
+        setBranchesError(getErrMessage(err, "Failed to load branches."));
+      })
+      .finally(() => {
+        if (!cancelled) setBranchesLoading(false);
+      });
+
+    getPOSCounters()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && Array.isArray(res.data)) {
+          setData(res.data.map(toRow));
+          setLoadError(null);
+        } else {
+          throw new Error(res.message || "Failed to load counters");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load counters:", err);
+        setLoadError(
+          getErrMessage(err, "Failed to load counters. Please try again.")
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredData = useMemo(() => {
     if (!searchTerm.trim()) return data;
     const term = searchTerm.toLowerCase();
     return data.filter(
       (item) =>
-        item.counterNo.toLowerCase().includes(term) ||
+        item.counterName.toLowerCase().includes(term) ||
+        item.counterCode.toLowerCase().includes(term) ||
+        item.branchName.toLowerCase().includes(term) ||
         item.ipAddress.toLowerCase().includes(term) ||
         item.macAddress.toLowerCase().includes(term)
     );
   }, [data, searchTerm]);
 
-  const resetForm = () => {
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-  };
-
-  const handleSubmit = () => {
-    if (!form.counterNo) {
-      setToast({ message: "Please select a counter number", type: "error" });
-      return;
-    }
-    if (!form.ipAddress.trim()) {
-      setToast({ message: "IP address is required", type: "error" });
-      return;
-    }
-    if (!form.macAddress.trim()) {
-      setToast({ message: "MAC address is required", type: "error" });
-      return;
-    }
-
-    const duplicate = data.find(
-      (item) => item.counterNo === form.counterNo && item.id !== editingId
-    );
-    if (duplicate) {
-      setToast({ message: `Counter ${form.counterNo} already exists`, type: "error" });
-      return;
-    }
-
-    if (editingId !== null) {
-      setData((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...item, ...form } : item))
-      );
-      setToast({ message: "Counter updated successfully", type: "success" });
-    } else {
-      setData((prev) => [...prev, { id: nextId, ...form }]);
-      setNextId((p) => p + 1);
-      setToast({ message: "Counter added successfully", type: "success" });
-    }
-    resetForm();
+  // --------------------------------------------------
+  // HANDLERS
+  // --------------------------------------------------
+  const handleAddNew = () => {
+    setEditing(null);
+    setModalOpen(true);
   };
 
   const handleEdit = (item: Counter) => {
-    setForm({
-      counterNo: item.counterNo,
-      ipAddress: item.ipAddress,
-      macAddress: item.macAddress,
-      status: item.status,
-    });
-    setEditingId(item.id);
-    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    setEditing(item);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    if (saving) return;
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const handleSave = async (
+    form: CounterFormState,
+    editingId: number | null
+  ) => {
+    if (saving) return;
+
+    const branchName =
+      branches.find((b) => b.value === form.branchId)?.text ?? "";
+
+    // Duplicate counter code within the same branch
+    const duplicate = data.find(
+      (item) =>
+        item.branchId === Number(form.branchId) &&
+        item.counterCode.toLowerCase() === form.counterCode.toLowerCase() &&
+        item.id !== editingId
+    );
+    if (duplicate) {
+      setToast({
+        message: `Counter code "${form.counterCode}" already exists in ${branchName || "this branch"}`,
+        type: "error",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editingId !== null) {
+        // PUT /api/POSCounters/{id} — update (branchId is not part of the update contract)
+        const res = await updatePOSCounter(editingId, {
+          counterCode: form.counterCode,
+          counterName: form.counterName,
+          ipAddress: form.ipAddress,
+          macAddress: form.macAddress,
+        });
+        if (res.success === false)
+          throw new Error(res.message || "Failed to update");
+
+        setToast({ message: "Counter updated successfully", type: "success" });
+      } else {
+        // POST /api/POSCounters — create (single DTO)
+        const res = await createPOSCounter({
+          branchId: Number(form.branchId),
+          counterCode: form.counterCode,
+          counterName: form.counterName,
+          ipAddress: form.ipAddress,
+          macAddress: form.macAddress,
+        });
+        if (res.success === false)
+          throw new Error(res.message || "Failed to save");
+
+        setToast({ message: "Counter added successfully", type: "success" });
+      }
+
+      setModalOpen(false);
+      setEditing(null);
+      await fetchCounters();
+    } catch (err) {
+      console.error("Failed to save counter:", err);
+      setToast({
+        message: getErrMessage(err, "Failed to save counter. Please try again."),
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = (id: number) => {
     setData((prev) => prev.filter((item) => item.id !== id));
     setToast({ message: "Counter deleted", type: "success" });
-    if (editingId === id) resetForm();
-  };
-
-  const handleToggleStatus = (id: number) => {
-    setData((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, status: item.status === "Active" ? "Inactive" : "Active" } : item
-      )
-    );
+    if (editing?.id === id) {
+      setModalOpen(false);
+      setEditing(null);
+    }
   };
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto bg-[#F5F7F3]">
+    <div className="h-full overflow-y-auto bg-[#F5F7F3]">
       <div className="mx-auto max-w-[1440px] space-y-5 p-4 lg:p-6" style={{ animation: "fade-up 0.4s ease both" }}>
+        {loadError && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FEE2E2] bg-red-50 px-5 py-3">
+            <div className="flex items-center gap-2 text-[12.5px] font-medium text-red-600">
+              <AlertTriangle size={15} />
+              {loadError}
+            </div>
+            <button
+              onClick={fetchCounters}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-50"
+            >
+              <RefreshCw size={12} />
+              Retry
+            </button>
+          </div>
+        )}
+
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
         {/* HEADER */}
-        <header>
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#10673E]/10 text-[#10673E]">
               <Monitor size={20} />
@@ -181,111 +671,17 @@ export default function CounterManagement() {
               <p className="mt-0.5 text-[12.5px] text-[#6B7280]">Configure POS counter devices, IPs, and MAC addresses</p>
             </div>
           </div>
+          <button
+            onClick={handleAddNew}
+            className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-4 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98]"
+          >
+            <Plus size={16} />
+            Add Counter
+          </button>
         </header>
 
         {/* ====================================================== */}
-        {/* TOP FORM                                                 */}
-        {/* ====================================================== */}
-        <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E]">
-              {editingId !== null ? <Pencil size={14} /> : <Plus size={14} />}
-            </div>
-            <h2 className="text-[14px] font-bold text-[#1F2937]">
-              {editingId !== null ? "Update Counter" : "Add New Counter"}
-            </h2>
-            {editingId !== null && (
-              <span className="rounded-md bg-[#F59E0B]/10 px-2 py-0.5 text-[11px] font-semibold text-[#D97706]">Edit Mode</span>
-            )}
-          </div>
-
-          <div className="p-5">
-            <div className="grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2 lg:grid-cols-4">
-              {/* Counter No */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
-                  <Hash size={13} className="text-[#6B7280]" />
-                  Counter No <span className="text-[#DC2626]">*</span>
-                </label>
-                <select
-                  value={form.counterNo}
-                  onChange={(e) => setForm((prev) => ({ ...prev, counterNo: e.target.value }))}
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1F2937] outline-none transition-colors focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
-                >
-                  <option value="">Select Counter</option>
-                  {COUNTER_OPTIONS.map((n) => (
-                    <option key={n} value={n}>Counter {n}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* IP Address */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
-                  <Globe size={13} className="text-[#6B7280]" />
-                  Counter IP Address <span className="text-[#DC2626]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.ipAddress}
-                  onChange={(e) => setForm((prev) => ({ ...prev, ipAddress: e.target.value }))}
-                  placeholder="192.168.1.100"
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
-                />
-              </div>
-
-              {/* MAC Address */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
-                  <Wifi size={13} className="text-[#6B7280]" />
-                  MAC Address <span className="text-[#DC2626]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.macAddress}
-                  onChange={(e) => setForm((prev) => ({ ...prev, macAddress: e.target.value }))}
-                  placeholder="00:1A:2B:3C:4D:5E"
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
-                />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-[#374151]">
-                  <Monitor size={13} className="text-[#6B7280]" />
-                  Status
-                </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as "Active" | "Inactive" }))}
-                  className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] text-[#1F2937] outline-none transition-colors focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="mt-5 flex items-center gap-2">
-              <button
-                onClick={handleSubmit}
-                className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-6 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98]"
-              >
-                {editingId !== null ? <><Check size={15} /> Update Counter</> : <><Plus size={15} /> Save Counter</>}
-              </button>
-              <button
-                onClick={resetForm}
-                className="flex h-10 items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-4 text-[13px] font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#374151]"
-              >
-                <X size={14} /> Reset
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ====================================================== */}
-        {/* BOTTOM TABLE                                              */}
+        {/* COUNTER LIST                                             */}
         {/* ====================================================== */}
         <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
@@ -312,54 +708,60 @@ export default function CounterManagement() {
               <thead>
                 <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
                   <th className="px-5 py-3 font-semibold text-[#6B7280]">SL</th>
-                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Counter No</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Branch</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Counter Name</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Counter Code</th>
                   <th className="px-5 py-3 font-semibold text-[#6B7280]">Counter IP</th>
                   <th className="px-5 py-3 font-semibold text-[#6B7280]">MAC Address</th>
-                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Status</th>
                   <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredData.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-16 text-center">
+                    <td colSpan={7} className="px-5 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-[#94A3B8]">
+                        <Loader2 size={28} className="animate-spin text-[#10673E]" />
+                        <p className="mt-2 text-[13px] font-medium">Loading counters...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-[#94A3B8]">
                         <Monitor size={30} strokeWidth={1.5} />
                         <p className="mt-2 text-[13px] font-medium">No counters found</p>
-                        <p className="mt-1 text-[12px]">{searchTerm ? "Try a different search term" : "Add a new counter above"}</p>
+                        <p className="mt-1 text-[12px]">{searchTerm ? "Try a different search term" : loadError ? "Fix the connection and retry" : "Click Add Counter to create one"}</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredData.map((item, index) => (
-                    <tr key={item.id} className="border-b border-[#F1F5F9] transition-colors hover:bg-[#F8FAFC]">
+                    <tr key={item.id} className={`border-b border-[#F1F5F9] transition-colors hover:bg-[#F8FAFC] ${editing?.id === item.id ? "bg-[#E8F5ED]/50" : ""}`}>
                       <td className="px-5 py-3 text-[#94A3B8]">{index + 1}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-[#F1F5F9] px-2.5 py-1 text-[12px] font-medium text-[#475569]">
+                          <Building2 size={12} />
+                          {item.branchName || `Branch #${item.branchId}`}
+                        </span>
+                      </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E]">
                             <Monitor size={13} />
                           </div>
-                          <span className="font-semibold text-[#1F2937]">Counter {item.counterNo}</span>
+                          <span className="font-semibold text-[#1F2937]">{item.counterName}</span>
                         </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="rounded-md bg-[#10673E]/10 px-2 py-0.5 font-mono text-[12px] font-semibold text-[#10673E]">{item.counterCode}</span>
                       </td>
                       <td className="px-5 py-3">
                         <code className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[12px] font-medium text-[#475569]">{item.ipAddress}</code>
                       </td>
                       <td className="px-5 py-3">
                         <code className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[12px] font-medium text-[#475569]">{item.macAddress}</code>
-                      </td>
-                      <td className="px-5 py-3">
-                        <button
-                          onClick={() => handleToggleStatus(item.id)}
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                            item.status === "Active"
-                              ? "bg-[#10673E]/10 text-[#10673E] hover:bg-[#10673E]/15"
-                              : "bg-[#F1F5F9] text-[#94A3B8] hover:bg-[#E2E8F0]"
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${item.status === "Active" ? "bg-[#10673E]" : "bg-[#CBD5E1]"}`} />
-                          {item.status}
-                        </button>
                       </td>
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -378,19 +780,27 @@ export default function CounterManagement() {
             </table>
           </div>
 
-          {filteredData.length > 0 && (
+          {!loading && filteredData.length > 0 && (
             <div className="flex items-center justify-between border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
               <p className="text-[12px] text-[#94A3B8]">Showing {filteredData.length} of {data.length} counters</p>
-              <div className="flex items-center gap-2 text-[12px]">
-                <span className="text-[#94A3B8]">Active:</span>
-                <span className="font-semibold text-[#10673E]">{filteredData.filter((i) => i.status === "Active").length}</span>
-                <span className="mx-1 text-[#E5E7EB]">|</span>
-                <span className="text-[#94A3B8]">Inactive:</span>
-                <span className="font-semibold text-[#94A3B8]">{filteredData.filter((i) => i.status === "Inactive").length}</span>
-              </div>
+              <p className="text-[12px] text-[#94A3B8]">Use Add Counter or the row edit action to open the entry modal</p>
             </div>
           )}
         </div>
+
+        {/* -------- Counter Modal (native <dialog>, page level) -------- */}
+        {modalOpen && (
+          <CounterModal
+            editing={editing}
+            branches={branches}
+            branchesLoading={branchesLoading}
+            branchesError={branchesError}
+            saving={saving}
+            onClose={handleCloseModal}
+            onSave={handleSave}
+            onRetryBranches={loadBranches}
+          />
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,39 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  changePassword,
+} from "../../api/authApi";
+import type {
+  ChangePasswordRequest,
+} from "../../api/authApi";
+
+/*
+ * Extract the backend error message from an API error.
+ * Falls back to a generic message — raw Axios errors
+ * are never shown to the user.
+ */
+const getErrorMessage = (error: unknown): string => {
+  if (
+    error &&
+    typeof error === "object" &&
+    "response" in error &&
+    error.response &&
+    typeof error.response === "object" &&
+    "data" in error.response &&
+    error.response.data &&
+    typeof error.response.data === "object" &&
+    "message" in error.response.data &&
+    typeof error.response.data.message === "string" &&
+    error.response.data.message.trim() !== ""
+  ) {
+    return error.response.data.message;
+  }
+
+  return "Failed to change password. Please try again.";
+};
+
 // ======================================================
 // TOAST
 // ======================================================
@@ -60,6 +93,9 @@ export default function ChangePassword() {
     message: string;
     type: "success" | "error";
   } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { user } = useAuth();
 
   // Password strength
   const getPasswordStrength = (pwd: string) => {
@@ -89,8 +125,12 @@ export default function ChangePassword() {
     "text-[#10673E]",
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (submitting) {
+      return;
+    }
 
     if (!currentPassword) {
       setToast({ message: "Please enter your current password", type: "error" });
@@ -113,10 +153,43 @@ export default function ChangePassword() {
       return;
     }
 
-    setToast({ message: "Password changed successfully", type: "success" });
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    /*
+     * Username comes from the logged-in user —
+     * never from localStorage.
+     */
+    if (!user) {
+      setToast({ message: "You are not logged in", type: "error" });
+      return;
+    }
+
+    const requestData: ChangePasswordRequest = {
+      userName: user.username,
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    };
+
+    setSubmitting(true);
+
+    try {
+      const response = await changePassword(requestData);
+
+      if (response.success) {
+        setToast({ message: "Password changed successfully", type: "success" });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setToast({
+          message: response.message || "Failed to change password. Please try again.",
+          type: "error",
+        });
+      }
+    } catch (error) {
+      setToast({ message: getErrorMessage(error), type: "error" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -329,10 +402,11 @@ export default function ChangePassword() {
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-2 rounded-lg bg-[#10673E] px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98]"
+                  disabled={submitting}
+                  className="flex items-center gap-2 rounded-lg bg-[#10673E] px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E] disabled:hover:shadow-sm disabled:active:scale-100"
                 >
-                  <KeyRound size={15} />
-                  Change Password
+                  <KeyRound size={15} className={submitting ? "animate-spin" : ""} />
+                  {submitting ? "Changing..." : "Change Password"}
                 </button>
               </div>
             </div>

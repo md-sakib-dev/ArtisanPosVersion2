@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Factory,
   Hash,
+  Loader2,
   Package,
   Plus,
   RotateCcw,
@@ -21,16 +22,27 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  getCurrentStockByBarcode,
+  type CurrentStock,
+} from "../../api/currentStockApi";
+import {
+  saveFactoryReturn,
+  type FactoryReturnDetailDto,
+} from "../../api/factoryReturnApi";
+import { useAuth } from "../../contexts/AuthContext";
+
 
 // ======================================================
 // TYPES
 // ======================================================
 
+/** Product info shown on the page — mapped from the CurrentStock API. */
 interface FactoryProduct {
+  productId: number;
   barcode: string;
-  name: string;
-  description: string;
-  unit: string;
+  shortName: string;
+  fullName: string;
   stockQty: number;
 }
 
@@ -39,62 +51,23 @@ interface ReturnItem extends FactoryProduct {
   returnQty: number;
 }
 
+/** Map a CurrentStock API row onto the page's product shape. */
+function toFactoryProduct(stock: CurrentStock): FactoryProduct {
+  return {
+    productId: stock.productId,
+    barcode: stock.barcode,
+    shortName: stock.shortName,
+    fullName: stock.fullName,
+    stockQty: stock.quantity,
+  };
+}
+
 type Toast =
   | {
       message: string;
       type: "success" | "error";
     }
   | null;
-
-
-// ======================================================
-// SAMPLE PRODUCT CATALOG
-// ======================================================
-
-const productCatalog: FactoryProduct[] = [
-  {
-    barcode: "123456789123456",
-    name: "Sample Product",
-    description: "Standard demo product — 200g pack",
-    unit: "Pcs",
-    stockQty: 500,
-  },
-  {
-    barcode: "789012",
-    name: "Product Two",
-    description: "Second demo item — 1L bottle",
-    unit: "Bottle",
-    stockQty: 120,
-  },
-  {
-    barcode: "345678",
-    name: "Product Three",
-    description: "Premium variant — 500g pack",
-    unit: "Pkt",
-    stockQty: 80,
-  },
-  {
-    barcode: "123455",
-    name: "Sample Product 2",
-    description: "Alternate pack — 1kg bag",
-    unit: "Bag",
-    stockQty: 45,
-  },
-  {
-    barcode: "999001",
-    name: "Detergent Powder 1kg",
-    description: "Washing powder — 1kg pack",
-    unit: "Pkt",
-    stockQty: 60,
-  },
-  {
-    barcode: "999002",
-    name: "Hand Soap 250ml",
-    description: "Liquid hand wash — 250ml bottle",
-    unit: "Bottle",
-    stockQty: 90,
-  },
-];
 
 
 // ======================================================
@@ -442,7 +415,7 @@ function ViewChallanModal({
                   text-[10px]
                   font-semibold
                 ">
-                  Product Name
+                  Product Name (Full)
                 </th>
 
                 <th className="
@@ -453,16 +426,6 @@ function ViewChallanModal({
                   font-semibold
                 ">
                   Return Qty
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
-                  Unit
                 </th>
 
               </tr>
@@ -509,7 +472,7 @@ function ViewChallanModal({
                     font-medium
                     text-[#17231D]
                   ">
-                    {item.name}
+                    {item.fullName}
                   </td>
 
                   <td className="
@@ -521,15 +484,6 @@ function ViewChallanModal({
                     text-[#10673E]
                   ">
                     {item.returnQty}
-                  </td>
-
-                  <td className="
-                    px-3
-                    py-2.5
-                    text-center
-                    text-[#66736B]
-                  ">
-                    {item.unit}
                   </td>
 
                 </tr>
@@ -580,12 +534,15 @@ function ViewChallanModal({
 
 function FactoryReturn() {
 
+  /* Logged-in user — outFromBranchId is taken from the login branch. */
+  const { user } = useAuth();
+
   // ====================================================
   // PRODUCT ENTRY STATE
   // ====================================================
 
   const [returnFor, setReturnFor] =
-    useState("Damaged Goods");
+    useState("");
 
   const [barcodeInput, setBarcodeInput] =
     useState("");
@@ -595,6 +552,12 @@ function FactoryReturn() {
 
   const [foundProduct, setFoundProduct] =
     useState<FactoryProduct | null>(null);
+
+  /* True while GET /CurrentStocks/by-barcode is in flight */
+  const [adding, setAdding] = useState(false);
+
+  /* True while POST /FactoryReturns is in flight */
+  const [saving, setSaving] = useState(false);
 
   const barcodeRef =
     useRef<HTMLInputElement>(null);
@@ -644,7 +607,8 @@ function FactoryReturn() {
 
 
   // ====================================================
-  // BARCODE LOOKUP
+  // BARCODE INPUT (product info fills after Add
+  // fetches GET /api/CurrentStocks/by-barcode)
   // ====================================================
 
   const handleBarcodeChange = (
@@ -653,26 +617,33 @@ function FactoryReturn() {
 
     setBarcodeInput(value);
 
-    const product = productCatalog.find(
-      (item) =>
-        item.barcode === value.trim()
+    /* Reset the auto-filled product info when the
+       barcode no longer matches the fetched one. */
+    setFoundProduct((current) =>
+      current && current.barcode === value.trim()
+        ? current
+        : null
     );
-
-    setFoundProduct(product ?? null);
   };
 
 
   // ====================================================
-  // ADD ITEM
+  // ADD ITEM — fetch stock by barcode, validate the
+  // requested qty against the current stock, then fill
+  // the fields and stage the row in the table.
   // ====================================================
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
 
-    const product = foundProduct;
+    if (adding) {
+      return;
+    }
 
-    if (!product) {
+    const code = barcodeInput.trim();
+
+    if (!code) {
       showToast(
-        "Product not found — check the barcode",
+        "Enter or scan a product barcode",
         "error"
       );
       return;
@@ -689,65 +660,111 @@ function FactoryReturn() {
       return;
     }
 
-    if (quantity > product.stockQty) {
-      showToast(
-        `Only ${product.stockQty} ${product.unit} in stock`,
-        "error"
+    setAdding(true);
+
+    try {
+
+      /* GET /api/CurrentStocks/by-barcode/{barcode} */
+      const res = await getCurrentStockByBarcode(
+        code
       );
-      return;
-    }
 
-    setItems((previousItems) => {
-
-      const existingIndex =
-        previousItems.findIndex(
-          (item) =>
-            item.barcode === product.barcode
+      if (!res.success || !res.data) {
+        setFoundProduct(null);
+        showToast(
+          res.message || "Product not found in current stock",
+          "error"
         );
-
-      if (existingIndex !== -1) {
-
-        const updatedItems = [
-          ...previousItems,
-        ];
-
-        const existingItem =
-          updatedItems[existingIndex];
-
-        const combinedQty = Math.min(
-          product.stockQty,
-          existingItem.returnQty + quantity
-        );
-
-        updatedItems[existingIndex] = {
-          ...existingItem,
-          returnQty: combinedQty,
-        };
-
-        return updatedItems;
+        return;
       }
 
-      return [
-        ...previousItems,
-        {
-          ...product,
-          id: nextId,
-          returnQty: quantity,
-        },
-      ];
-    });
+      const product = toFactoryProduct(res.data);
 
-    setNextId((id) => id + 1);
-    setBarcodeInput("");
-    setReturnQtyInput("1");
-    setFoundProduct(null);
+      /* Qty must match or be less than the current stock */
+      if (quantity > product.stockQty) {
+        showToast(
+          `Only ${product.stockQty} in stock — cannot return ${quantity}`,
+          "error"
+        );
+        return;
+      }
 
-    showToast(
-      `${quantity} ${product.unit} added to return`,
-      "success"
-    );
+      /* Existing row for the same barcode → merged qty
+         must also stay within the current stock. */
+      const existingItem = items.find(
+        (item) => item.barcode === product.barcode
+      );
 
-    barcodeRef.current?.focus();
+      if (
+        existingItem &&
+        existingItem.returnQty + quantity > product.stockQty
+      ) {
+        showToast(
+          `Total return (${existingItem.returnQty + quantity}) exceeds current stock (${product.stockQty})`,
+          "error"
+        );
+        return;
+      }
+
+      /* Fill the auto-populated fields */
+      setFoundProduct(product);
+
+      /* Stage / merge the row in the table */
+      if (existingItem) {
+        setItems((previousItems) =>
+          previousItems.map((item) =>
+            item.barcode === product.barcode
+              ? {
+                  ...item,
+                  returnQty: item.returnQty + quantity,
+                }
+              : item
+          )
+        );
+      } else {
+        setItems((previousItems) => [
+          ...previousItems,
+          {
+            ...product,
+            id: nextId,
+            returnQty: quantity,
+          },
+        ]);
+      }
+
+      setNextId((id) => id + 1);
+      setBarcodeInput("");
+      setReturnQtyInput("1");
+
+      showToast(
+        `${quantity} added to return — ${product.fullName}`,
+        "success"
+      );
+
+      barcodeRef.current?.focus();
+
+    } catch (err) {
+
+      const anyErr = err as {
+        response?: {
+          status?: number;
+          data?: { message?: string };
+        };
+      };
+
+      setFoundProduct(null);
+
+      showToast(
+        anyErr?.response?.data?.message ||
+          (anyErr?.response?.status === 404
+            ? "Product not found in current stock"
+            : "Stock lookup failed. Please try again."),
+        "error"
+      );
+
+    } finally {
+      setAdding(false);
+    }
   };
 
 
@@ -757,37 +774,6 @@ function FactoryReturn() {
 
   const handleSearch = () => {
     barcodeRef.current?.focus();
-  };
-
-
-  // ====================================================
-  // RETURN QTY (TABLE)
-  // ====================================================
-
-  const handleReturnQtyChange = (
-    id: number,
-    value: string
-  ) => {
-
-    setItems((previousItems) =>
-      previousItems.map((item) => {
-
-        if (item.id !== id) {
-          return item;
-        }
-
-        const quantity =
-          Math.floor(Number(value) || 0);
-
-        return {
-          ...item,
-          returnQty: Math.min(
-            item.stockQty,
-            Math.max(1, quantity)
-          ),
-        };
-      })
-    );
   };
 
 
@@ -817,10 +803,16 @@ function FactoryReturn() {
 
 
   // ====================================================
-  // SAVE
+  // SAVE — POST /api/FactoryReturns
+  // outFromBranchId = logged-in user's branch,
+  // outToBranchId = 1 (factory)
   // ====================================================
 
-  const handleSave = () => {
+  const handleSave = async () => {
+
+    if (saving) {
+      return;
+    }
 
     if (items.length === 0) {
       showToast(
@@ -830,10 +822,76 @@ function FactoryReturn() {
       return;
     }
 
-    showToast(
-      `Return saved — ${items.length} items (${totalReturnQty} units)`,
-      "success"
-    );
+    if (!returnFor) {
+      showToast(
+        "Select a return for first",
+        "error"
+      );
+      return;
+    }
+
+    const details: FactoryReturnDetailDto[] = items.map((item) => ({
+      productId: item.productId,
+      barcode: item.barcode,
+      sentQty: item.returnQty,
+    }));
+
+    const payload = {
+      master: {
+        productOutType: returnFor,
+        outFromBranchId: user?.branchId ?? 0,
+        outToBranchId: 1,
+        outDate: new Date().toISOString(),
+        remarks: remarks.trim(),
+      },
+      details,
+    };
+
+    setSaving(true);
+
+    try {
+
+      const res = await saveFactoryReturn(payload);
+
+      if (!res.success) {
+        showToast(
+          res.message || "Failed to save factory return",
+          "error"
+        );
+        return;
+      }
+
+      showToast(
+        res.message ||
+          `Return saved — ${items.length} items (${totalReturnQty} units)`,
+        "success"
+      );
+
+      /* Clear the form after a successful save */
+      setItems([]);
+      setBarcodeInput("");
+      setReturnQtyInput("1");
+      setFoundProduct(null);
+      setRemarks("");
+      setReturnFor("");
+
+      barcodeRef.current?.focus();
+
+    } catch (err) {
+
+      const anyErr = err as {
+        response?: { data?: { message?: string } };
+      };
+
+      showToast(
+        anyErr?.response?.data?.message ||
+          "Failed to save factory return. Please try again.",
+        "error"
+      );
+
+    } finally {
+      setSaving(false);
+    }
   };
 
 
@@ -1004,13 +1062,25 @@ function FactoryReturn() {
               onChange={(e) =>
                 setReturnFor(e.target.value)
               }
-              className={smallInputClass}
+              className={`
+                ${smallInputClass}
+                ${
+                  returnFor
+                    ? ""
+                    : "text-[#9AA29C]"
+                }
+              `}
             >
-              <option>Damaged Goods</option>
-              <option>Expired Product</option>
-              <option>Wrong Item</option>
-              <option>Quality Issue</option>
-              <option>Excess Stock</option>
+              <option value="" disabled>
+                Select return for
+              </option>
+
+              <option value="Warehouse">
+                Warehouse
+              </option>
+              <option value="Pricing">
+                Pricing
+              </option>           
             </select>
 
           </Field>
@@ -1034,6 +1104,7 @@ function FactoryReturn() {
                   handleAdd();
                 }
               }}
+              disabled={adding}
               className={`
                 ${smallInputClass}
                 font-mono
@@ -1082,6 +1153,7 @@ function FactoryReturn() {
             <button
               type="button"
               onClick={handleAdd}
+              disabled={adding}
               className="
                 inline-flex
                 h-8
@@ -1097,9 +1169,15 @@ function FactoryReturn() {
                 transition
                 hover:bg-[#10673E]
                 active:scale-[0.98]
+                disabled:cursor-not-allowed
+                disabled:opacity-60
               "
             >
-              <Plus size={13} />
+              {adding ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Plus size={13} />
+              )}
               Add
             </button>
 
@@ -1153,10 +1231,7 @@ function FactoryReturn() {
             <input
               readOnly
               value={
-                foundProduct?.name ??
-                (barcodeInput.trim()
-                  ? "Product not found"
-                  : "—")
+                foundProduct?.fullName ?? "—"
               }
               className={`
                 ${readOnlyInputClass}
@@ -1172,15 +1247,14 @@ function FactoryReturn() {
 
 
           <Field
-            label="Product Description"
+            label="Short Name"
             icon={<ClipboardList size={13} />}
           >
 
             <input
               readOnly
               value={
-                foundProduct?.description ??
-                "—"
+                foundProduct?.shortName ?? "—"
               }
               className={readOnlyInputClass}
             />
@@ -1197,7 +1271,7 @@ function FactoryReturn() {
               readOnly
               value={
                 foundProduct
-                  ? `${foundProduct.stockQty} ${foundProduct.unit}`
+                  ? `${foundProduct.stockQty}`
                   : "—"
               }
               className={`
@@ -1343,7 +1417,7 @@ function FactoryReturn() {
                   text-[10px]
                   font-semibold
                 ">
-                  Product Name
+                  Product Name (Full)
                 </th>
 
                 <th className="
@@ -1373,16 +1447,6 @@ function FactoryReturn() {
                   text-[10px]
                   font-semibold
                 ">
-                  Unit
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-center
-                  text-[10px]
-                  font-semibold
-                ">
                   Action
                 </th>
 
@@ -1397,7 +1461,7 @@ function FactoryReturn() {
                 <tr>
 
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="
                       py-14
                       text-center
@@ -1479,7 +1543,7 @@ function FactoryReturn() {
                       font-medium
                       text-[#17231D]
                     ">
-                      {item.name}
+                      {item.fullName}
                     </td>
 
                     <td className="
@@ -1497,49 +1561,11 @@ function FactoryReturn() {
                       px-3
                       py-2
                       text-center
+                      font-semibold
+                      tabular-nums
+                      text-[#10673E]
                     ">
-
-                      <input
-                        type="number"
-                        min={1}
-                        max={item.stockQty}
-                        value={item.returnQty}
-                        onChange={(e) =>
-                          handleReturnQtyChange(
-                            item.id,
-                            e.target.value
-                          )
-                        }
-                        className="
-                          h-7
-                          w-16
-                          rounded-md
-                          border
-                          border-[#DDE5DF]
-                          bg-white
-                          px-1.5
-                          text-center
-                          text-xs
-                          font-semibold
-                          tabular-nums
-                          text-[#17231D]
-                          outline-none
-                          transition
-                          focus:border-[#0E9351]
-                          focus:ring-2
-                          focus:ring-[#0E9351]/15
-                        "
-                      />
-
-                    </td>
-
-                    <td className="
-                      px-3
-                      py-2
-                      text-center
-                      text-[#66736B]
-                    ">
-                      {item.unit}
+                      {item.returnQty}
                     </td>
 
                     <td className="
@@ -1690,6 +1716,7 @@ function FactoryReturn() {
           <button
             type="button"
             onClick={handleSave}
+            disabled={saving}
             className="
               inline-flex
               h-14
@@ -1706,10 +1733,16 @@ function FactoryReturn() {
               transition
               hover:bg-[#10673E]
               active:scale-[0.99]
+              disabled:cursor-not-allowed
+              disabled:opacity-60
             "
           >
-            <Save size={16} />
-            Save
+            {saving ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Save size={16} />
+            )}
+            {saving ? "Saving..." : "Save"}
           </button>
 
         </div>

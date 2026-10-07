@@ -691,7 +691,7 @@ const handleAddProduct = async () => {
         "
         >
           <div>
-          <Link to="/"><img
+          <Link to="/dashboard"><img
           src={logo}
           alt="Company Logo"
           className="h-8 w-auto object-contain"

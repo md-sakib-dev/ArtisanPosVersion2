@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BadgePercent,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Loader2,
   Pencil,
   Plus,
   Search,
@@ -12,12 +13,20 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import {
+  createDiscount,
+  extractDiscountList,
+  getDiscounts,
+  updateDiscount,
+  type DiscountPayload,
+  type DiscountRecord,
+} from "../../api/discountApi";
 
 // ======================================================
 // TYPES
 // ======================================================
 
-type DiscountType = "Percentage (%)" | "Fixed Amount ($)" | "Tiered";
+type DiscountType = "PERCENTAGE" | "FIXED";
 
 type DiscountStatus = "Active" | "Expired" | "Scheduled";
 
@@ -50,11 +59,10 @@ type Toast = { message: string; type: "success" | "error" } | null;
 // CONSTANTS
 // ======================================================
 
-const DISCOUNT_TYPES: DiscountType[] = [
-  "Percentage (%)",
-  "Fixed Amount ($)",
-  "Tiered",
-];
+const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
+  PERCENTAGE: "Percentage (%)",
+  FIXED: "Fixed Amount ($)",
+};
 
 const EMPTY_FORM: DiscountForm = {
   code: "",
@@ -67,122 +75,29 @@ const EMPTY_FORM: DiscountForm = {
   maxAmount: "",
 };
 
-const INITIAL_DATA: Discount[] = [
-  {
-    id: 1,
-    code: "SUMMER2026",
-    name: "Summer Clearance Sale",
-    type: "Percentage (%)",
-    amount: 15,
-    validFrom: "2026-06-01",
-    validTo: "2026-09-30",
-    minAmount: 500,
-    maxAmount: 5000,
-  },
-  {
-    id: 2,
-    code: "NEWYEAR26",
-    name: "New Year Special",
-    type: "Fixed Amount ($)",
-    amount: 100,
-    validFrom: "2026-01-01",
-    validTo: "2026-01-15",
-    minAmount: null,
-    maxAmount: null,
-  },
-  {
-    id: 3,
-    code: "VIPTIER",
-    name: "VIP Tiered Discount",
-    type: "Tiered",
-    amount: 250,
-    validFrom: "2026-08-01",
-    validTo: "2026-12-31",
-    minAmount: 2000,
-    maxAmount: 10000,
-  },
-  {
-    id: 4,
-    code: "FESTIVE",
-    name: "Eid Festival Offer",
-    type: "Percentage (%)",
-    amount: 20,
-    validFrom: "2026-09-10",
-    validTo: "2026-09-25",
-    minAmount: 1000,
-    maxAmount: 8000,
-  },
-  {
-    id: 5,
-    code: "FLASH5",
-    name: "Flash Sale 5%",
-    type: "Percentage (%)",
-    amount: 5,
-    validFrom: "2026-09-05",
-    validTo: "2026-09-09",
-    minAmount: null,
-    maxAmount: 2000,
-  },
-  {
-    id: 6,
-    code: "WELCOME",
-    name: "Welcome Bonus",
-    type: "Fixed Amount ($)",
-    amount: 50,
-    validFrom: "2026-01-01",
-    validTo: "",
-    minAmount: null,
-    maxAmount: null,
-  },
-  {
-    id: 7,
-    code: "CLEARANCE",
-    name: "Clearance Blowout",
-    type: "Percentage (%)",
-    amount: 30,
-    validFrom: "2026-07-01",
-    validTo: "2026-08-31",
-    minAmount: 300,
-    maxAmount: null,
-  },
-  {
-    id: 8,
-    code: "BULK10",
-    name: "Bulk Order Discount",
-    type: "Tiered",
-    amount: 500,
-    validFrom: "2026-09-01",
-    validTo: "2026-12-31",
-    minAmount: 5000,
-    maxAmount: 50000,
-  },
-  {
-    id: 9,
-    code: "MONSOON",
-    name: "Monsoon Offer",
-    type: "Percentage (%)",
-    amount: 10,
-    validFrom: "2026-08-15",
-    validTo: "2026-09-15",
-    minAmount: null,
-    maxAmount: null,
-  },
-  {
-    id: 10,
-    code: "ANNIV",
-    name: "Anniversary Special",
-    type: "Fixed Amount ($)",
-    amount: 200,
-    validFrom: "2026-09-20",
-    validTo: "2026-10-05",
-    minAmount: 1500,
-    maxAmount: 6000,
-  },
-];
-
 // ======================================================
 // HELPERS
 // ======================================================
+
+/** Map a GET /api/Discounts record to the local table row shape. */
+function mapRecord(record: DiscountRecord): Discount {
+  return {
+    id: record.discountId,
+    code: record.discountCode,
+    name: record.discountName,
+    type:
+      record.discountType === "FIXED"
+        ? "FIXED"
+        : "PERCENTAGE",
+    amount: record.discountValue,
+    validFrom: record.startDate
+      ? record.startDate.slice(0, 10)
+      : "",
+    validTo: record.endDate ? record.endDate.slice(0, 10) : "",
+    minAmount: record.minimumSaleAmount || null,
+    maxAmount: record.maximumDiscountAmount || null,
+  };
+}
 
 function getStatus(discount: Discount): DiscountStatus {
   const today = new Date();
@@ -205,7 +120,7 @@ function getStatus(discount: Discount): DiscountStatus {
 }
 
 function formatAmount(discount: Discount): string {
-  if (discount.type === "Percentage (%)") {
+  if (discount.type === "PERCENTAGE") {
     return `${discount.amount}%`;
   }
   return `$${discount.amount.toFixed(2)}`;
@@ -296,6 +211,7 @@ interface DiscountModalProps {
   editingId: number | null;
   form: DiscountForm;
   errors: Record<string, string>;
+  isSaving: boolean;
   onChange: (field: keyof DiscountForm, value: string) => void;
   onSave: () => void;
   onClose: () => void;
@@ -306,6 +222,7 @@ function DiscountModal({
   editingId,
   form,
   errors,
+  isSaving,
   onChange,
   onSave,
   onClose,
@@ -442,11 +359,13 @@ function DiscountModal({
                 <option value="" disabled>
                   Select discount type
                 </option>
-                {DISCOUNT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
+                {(Object.keys(DISCOUNT_TYPE_LABELS) as DiscountType[]).map(
+                  (type) => (
+                    <option key={type} value={type}>
+                      {DISCOUNT_TYPE_LABELS[type]}
+                    </option>
+                  )
+                )}
               </select>
               {errors.type && (
                 <p className="mt-1 text-[11px] font-medium text-red-500">
@@ -467,11 +386,9 @@ function DiscountModal({
                 value={form.amount}
                 onChange={(e) => onChange("amount", e.target.value)}
                 placeholder={
-                  form.type === "Percentage (%)"
+                  form.type === "PERCENTAGE"
                     ? "e.g. 15"
-                    : form.type === "Tiered"
-                      ? "e.g. 100.00"
-                      : "e.g. 100.00"
+                    : "e.g. 100.00"
                 }
                 className={inputClass("amount")}
               />
@@ -566,16 +483,22 @@ function DiscountModal({
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#E6EAE3] bg-[#FAFBF9] px-5 py-3.5">
           <button
             onClick={onClose}
-            className="flex h-10 items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-5 text-[13px] font-medium text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#374151]"
+            disabled={isSaving}
+            className="flex h-10 items-center gap-2 rounded-lg border border-[#D1D5DB] bg-white px-5 text-[13px] font-medium text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#374151] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancel
           </button>
           <button
             onClick={onSave}
-            className="flex h-10 items-center gap-2 rounded-lg bg-[#0E9351] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#10673E] hover:shadow-md active:scale-[0.98]"
+            disabled={isSaving}
+            className="flex h-10 items-center gap-2 rounded-lg bg-[#0E9351] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
           >
-            <CheckCircle2 size={15} />
-            Save Discount
+            {isSaving ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={15} />
+            )}
+            {isSaving ? "Saving..." : "Save Discount"}
           </button>
         </div>
       </div>
@@ -591,8 +514,9 @@ export default function DiscountManagement() {
   // --------------------------------------------------
   // DATA
   // --------------------------------------------------
-  const [data, setData] = useState<Discount[]>(INITIAL_DATA);
-  const [nextId, setNextId] = useState(11);
+  const [data, setData] = useState<Discount[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // --------------------------------------------------
   // MODAL STATE
@@ -613,6 +537,39 @@ export default function DiscountManagement() {
   // TOAST
   // --------------------------------------------------
   const [toast, setToast] = useState<Toast>(null);
+
+  /* True while POST /Discounts or PUT /Discounts/{id} is in flight */
+  const [isSaving, setIsSaving] = useState(false);
+
+  // --------------------------------------------------
+  // LOAD — GET /api/Discounts
+  // --------------------------------------------------
+  const loadDiscounts = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+
+    try {
+      const body = await getDiscounts();
+      const records = extractDiscountList(body.data);
+
+      setData(records.map(mapRecord));
+    } catch (err) {
+      const anyErr = err as {
+        response?: { data?: { message?: string } };
+      };
+      setFetchError(
+        anyErr?.response?.data?.message ||
+          "Failed to load discounts. Please try again."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadDiscounts();
+  }, [loadDiscounts]);
 
   // --------------------------------------------------
   // FILTERED + PAGINATED DATA
@@ -694,9 +651,12 @@ export default function DiscountManagement() {
   };
 
   // --------------------------------------------------
-  // SAVE
+  // SAVE — POST /api/Discounts (create) or
+  // PUT /api/Discounts/{id} (edit), then update the local list
   // --------------------------------------------------
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSaving) return;
+
     const nextErrors: Record<string, string> = {};
 
     if (!form.code.trim()) {
@@ -782,42 +742,116 @@ export default function DiscountManagement() {
       return;
     }
 
-    const discount: Discount = {
-      id: editingId ?? nextId,
-      code: form.code.trim(),
-      name: form.name.trim(),
-      type: form.type as DiscountType,
-      amount,
-      validFrom: form.validFrom,
-      validTo: form.validTo,
-      minAmount: min,
-      maxAmount: max,
-    };
+    setIsSaving(true);
 
-    if (editingId !== null) {
-      setData((prev) =>
-        prev.map((item) =>
-          item.id === editingId ? discount : item
-        )
-      );
+    try {
+      /* Backend DTO — no discountId on create (the backend assigns
+         it). Dates are sent as ISO UTC datetimes and endDate is null
+         when the discount has no end date. activeSts 1 = active. */
+      const payload: DiscountPayload = {
+        discountCode: form.code.trim(),
+        discountName: form.name.trim(),
+        discountType: form.type,
+        discountValue: amount,
+        maximumDiscountAmount: max ?? 0,
+        minimumSaleAmount: min ?? 0,
+        startDate: new Date(`${form.validFrom}T00:00:00`).toISOString(),
+        endDate: form.validTo
+          ? new Date(`${form.validTo}T23:59:59`).toISOString()
+          : null,
+        activeSts: 1,
+      };
+
+      const response = editingId !== null
+        ? await updateDiscount(editingId, payload)
+        : await createDiscount(payload);
+
+      if (!response.success) {
+        setToast({
+          message:
+            response.message ||
+            (editingId !== null
+              ? "Failed to update discount"
+              : "Failed to create discount"),
+          type: "error",
+        });
+        return;
+      }
+
+      if (editingId !== null) {
+        setData((prev) =>
+          prev.map((item) =>
+            item.id === editingId
+              ? {
+                  ...item,
+                  code: form.code.trim(),
+                  name: form.name.trim(),
+                  type: form.type as DiscountType,
+                  amount,
+                  validFrom: form.validFrom,
+                  validTo: form.validTo,
+                  minAmount: min,
+                  maxAmount: max,
+                }
+              : item
+          )
+        );
+        setToast({
+          message:
+            response.message ||
+            `Discount "${form.code.trim()}" updated successfully`,
+          type: "success",
+        });
+      } else {
+        /* Adopt the backend-assigned ID when the create response
+           carries one; otherwise use a provisional local ID. */
+        const created = response.data as
+          | { discountId?: number }
+          | null
+          | undefined;
+        const provisionalId =
+          data.reduce((maxId, item) => Math.max(maxId, item.id), 0) + 1;
+
+        setData((prev) => [
+          ...prev,
+          {
+            id: created?.discountId ?? provisionalId,
+            code: form.code.trim(),
+            name: form.name.trim(),
+            type: form.type as DiscountType,
+            amount,
+            validFrom: form.validFrom,
+            validTo: form.validTo,
+            minAmount: min,
+            maxAmount: max,
+          },
+        ]);
+        setToast({
+          message:
+            response.message ||
+            `Discount "${form.code.trim()}" created successfully`,
+          type: "success",
+        });
+      }
+
+      /* Reconcile with the server so IDs and fields match the DB */
+      void loadDiscounts();
+
+      setIsModalOpen(false);
+    } catch (err) {
+      const anyErr = err as { response?: { data?: { message?: string } } };
       setToast({
-        message: `Discount "${discount.code}" updated successfully`,
-        type: "success",
+        message:
+          anyErr?.response?.data?.message || "Failed to save discount. Please try again.",
+        type: "error",
       });
-    } else {
-      setData((prev) => [...prev, discount]);
-      setNextId((prev) => prev + 1);
-      setToast({
-        message: `Discount "${discount.code}" created successfully`,
-        type: "success",
-      });
+    } finally {
+      setIsSaving(false);
     }
-
-    setIsModalOpen(false);
   };
 
   // --------------------------------------------------
-  // DELETE
+  // DELETE (local only — no DELETE endpoint yet)
   // --------------------------------------------------
   const handleDelete = (discount: Discount) => {
     setData((prev) =>
@@ -1008,7 +1042,35 @@ export default function DiscountManagement() {
                 </tr>
               </thead>
               <tbody>
-                {visibleData.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-[#94A3B8]">
+                        <Loader2 size={30} className="animate-spin" />
+                        <p className="mt-2 text-[13px] font-medium">
+                          Loading discounts...
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : fetchError ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-[#B84A4A]">
+                        <CircleAlert size={30} strokeWidth={1.5} />
+                        <p className="mt-2 text-[13px] font-medium">
+                          {fetchError}
+                        </p>
+                        <button
+                          onClick={() => void loadDiscounts()}
+                          className="mt-3 rounded-lg border border-[#B84A4A]/30 px-4 py-1.5 text-[12px] font-semibold text-[#B84A4A] transition-colors hover:bg-[#FCECEC]"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : visibleData.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-[#94A3B8]">
@@ -1045,7 +1107,7 @@ export default function DiscountManagement() {
                         </td>
                         <td className="px-5 py-3">
                           <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2.5 py-1 text-[12px] font-medium text-[#475569]">
-                            {discount.type}
+                            {DISCOUNT_TYPE_LABELS[discount.type]}
                           </span>
                         </td>
                         <td className="px-5 py-3 font-semibold text-[#10673E]">
@@ -1139,6 +1201,7 @@ export default function DiscountManagement() {
         editingId={editingId}
         form={form}
         errors={errors}
+        isSaving={isSaving}
         onChange={handleChange}
         onSave={handleSave}
         onClose={() => setIsModalOpen(false)}
