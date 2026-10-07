@@ -53,7 +53,7 @@ export const reportSections: ReportSection[] = [
       { id: 107, label: "Product Style", path: "/productstylereport", icon: Shirt, description: "All product styles" },
       { id: 108, label: "Product Color", path: "/productcolorreport", icon: Palette, description: "All product colors" },
       { id: 109, label: "Stock Report", path: "/stock", icon: Warehouse },
-      { id: 110, label: "Stock Valuation", path: "/stock", icon: DollarSign },
+      { id: 110, label: "Stock Valuation", path: "/stockvaluation", icon: DollarSign },
       { id: 111, label: "Stock Transfer", path: "/stocktransfer", icon: ArrowLeftRight },
       { id: 112, label: "Stock Summary", path: "/stock", icon: BarChart3 },
       { id: 113, label: "Product Receive", path: "/productreceive", icon: Truck },

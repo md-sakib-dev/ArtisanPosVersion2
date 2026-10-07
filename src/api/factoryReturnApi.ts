@@ -11,7 +11,7 @@ import api from "./axios";
 export interface FactoryReturn {
   productOutMasterId: number;
   referenceNumber: string; // e.g. VT26225 / MRT333
-  productOutType: number;
+  productOutType: string;
   outFromBranchId: number;
   outToBranchId: number;
   outDate: string; // ISO date-time
@@ -77,7 +77,7 @@ export interface FactoryReturnDetailDto {
 export interface SaveFactoryReturnPayload {
   master: {
     /* referenceNumber is not sent — the backend generates it. */
-    productOutType: number;
+    productOutType: string;
     outFromBranchId: number;
     outToBranchId: number;
     outDate: string; // ISO date-time

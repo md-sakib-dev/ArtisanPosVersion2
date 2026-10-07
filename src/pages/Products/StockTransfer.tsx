@@ -1133,7 +1133,7 @@ function StockTransfer() {
               {productOutTypeOptions.map((option) => (
                 <option
                   key={option.value}
-                  value={option.value}
+                  value={option.text}
                 >
                   {option.text}
                 </option>

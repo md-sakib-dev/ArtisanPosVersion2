@@ -43,6 +43,7 @@ import SalesTargetPage from './pages/Admin/SalesTargetPage'
 import PaymentTypeManagement from './pages/Admin/PaymentTypeManagement'
 import BranchManagement from './pages/Admin/BranchManagement'
 import CounterManagement from './pages/Admin/CounterManagement'
+import StockValuation from './pages/Reports/StockValuation'
 import ChangePassword from './pages/Admin/ChangePassword'
 import MenuSetup from './pages/Admin/MenuSetup'
 import ErrorPage from './pages/ErrorPage'
@@ -102,6 +103,7 @@ function App() {
                 <Route path="/counters" element={<CounterManagement />} />
                 <Route path="/changepassword" element={<ChangePassword />} />
                 <Route path="/menusetup" element={<MenuSetup />} />
+                <Route path="/stockvaluation" element={<StockValuation />} />
             <Route path="*" element={<ErrorPage />} />
           </Route>
 

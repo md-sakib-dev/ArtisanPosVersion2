@@ -542,7 +542,7 @@ function FactoryReturn() {
   // ====================================================
 
   const [returnFor, setReturnFor] =
-    useState("Damaged Goods");
+    useState("");
 
   const [barcodeInput, setBarcodeInput] =
     useState("");
@@ -778,37 +778,6 @@ function FactoryReturn() {
 
 
   // ====================================================
-  // RETURN QTY (TABLE)
-  // ====================================================
-
-  const handleReturnQtyChange = (
-    id: number,
-    value: string
-  ) => {
-
-    setItems((previousItems) =>
-      previousItems.map((item) => {
-
-        if (item.id !== id) {
-          return item;
-        }
-
-        const quantity =
-          Math.floor(Number(value) || 0);
-
-        return {
-          ...item,
-          returnQty: Math.min(
-            item.stockQty,
-            Math.max(1, quantity)
-          ),
-        };
-      })
-    );
-  };
-
-
-  // ====================================================
   // REMOVE ITEM
   // ====================================================
 
@@ -853,6 +822,14 @@ function FactoryReturn() {
       return;
     }
 
+    if (!returnFor) {
+      showToast(
+        "Select a return for first",
+        "error"
+      );
+      return;
+    }
+
     const details: FactoryReturnDetailDto[] = items.map((item) => ({
       productId: item.productId,
       barcode: item.barcode,
@@ -861,7 +838,7 @@ function FactoryReturn() {
 
     const payload = {
       master: {
-        productOutType: 1,
+        productOutType: returnFor,
         outFromBranchId: user?.branchId ?? 0,
         outToBranchId: 1,
         outDate: new Date().toISOString(),
@@ -896,6 +873,7 @@ function FactoryReturn() {
       setReturnQtyInput("1");
       setFoundProduct(null);
       setRemarks("");
+      setReturnFor("");
 
       barcodeRef.current?.focus();
 
@@ -1084,11 +1062,25 @@ function FactoryReturn() {
               onChange={(e) =>
                 setReturnFor(e.target.value)
               }
-              className={smallInputClass}
+              className={`
+                ${smallInputClass}
+                ${
+                  returnFor
+                    ? ""
+                    : "text-[#9AA29C]"
+                }
+              `}
             >
-              <option>Select</option>
-              <option>Warehouse</option>
-              <option>Pricing</option>           
+              <option value="" disabled>
+                Select return for
+              </option>
+
+              <option value="Warehouse">
+                Warehouse
+              </option>
+              <option value="Pricing">
+                Pricing
+              </option>           
             </select>
 
           </Field>
@@ -1469,7 +1461,7 @@ function FactoryReturn() {
                 <tr>
 
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="
                       py-14
                       text-center
@@ -1569,40 +1561,11 @@ function FactoryReturn() {
                       px-3
                       py-2
                       text-center
+                      font-semibold
+                      tabular-nums
+                      text-[#10673E]
                     ">
-
-                      <input
-                        type="number"
-                        min={1}
-                        max={item.stockQty}
-                        value={item.returnQty}
-                        onChange={(e) =>
-                          handleReturnQtyChange(
-                            item.id,
-                            e.target.value
-                          )
-                        }
-                        className="
-                          h-7
-                          w-16
-                          rounded-md
-                          border
-                          border-[#DDE5DF]
-                          bg-white
-                          px-1.5
-                          text-center
-                          text-xs
-                          font-semibold
-                          tabular-nums
-                          text-[#17231D]
-                          outline-none
-                          transition
-                          focus:border-[#0E9351]
-                          focus:ring-2
-                          focus:ring-[#0E9351]/15
-                        "
-                      />
-
+                      {item.returnQty}
                     </td>
 
                     <td className="

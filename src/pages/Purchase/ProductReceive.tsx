@@ -14,38 +14,30 @@ import {
 
 import {
   useCallback,
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
 
+import {
+  getPendingChallans,
+  getProductReceiveByReference,
+  receiveChalan,
+  type PendingChallan,
+  type ProductReceiveDetail,
+} from "../../api/productReceiveApi";
 
-// ======================================================
-// TYPES
-// ======================================================
+/*
+  Change the import above if your API service file
+  has a different path/name.
+*/
 
-type DeliveryType =
-  | "Factory"
-  | "Stock Transfer"
-  | "Pricing";
 
-interface ReceiveItem {
-  id: number;
-  productName: string;
-  description: string;
-  barcode: string;
-  challanQty: number;
-  receivedQty: number;
-  price: number;
-}
+/* ================================================================
+   TYPES
+================================================================ */
 
-interface PendingChallan {
-  id: number;
-  type: DeliveryType;
-  challanNo: string;
-  challanTime: string;
-  deliveryFrom: string;
-  items: ReceiveItem[];
-}
+type ReceiveItem = ProductReceiveDetail;
 
 type Toast =
   | {
@@ -55,131 +47,9 @@ type Toast =
   | null;
 
 
-// ======================================================
-// SAMPLE DATA
-// ======================================================
-
-const deliveryTypeOptions: DeliveryType[] = [
-  "Factory",
-  "Stock Transfer",
-  "Pricing",
-];
-
-const pendingChallans: PendingChallan[] = [
-  {
-    id: 1,
-    type: "Factory",
-    challanNo: "ARTSND-2608015038",
-    challanTime: "30 Aug 2026, 09:30 AM",
-    deliveryFrom: "Head Office",
-    items: [
-      {
-        id: 11,
-        productName: "Men's Casual Shirt",
-        description: "Cotton slim fit, sky blue",
-        barcode: "8801234567890",
-        challanQty: 48,
-        receivedQty: 48,
-        price: 320,
-      },
-      {
-        id: 12,
-        productName: "Women's Silk Scarf",
-        description: "Handwoven, floral print",
-        barcode: "8801234567891",
-        challanQty: 36,
-        receivedQty: 36,
-        price: 750,
-      },
-      {
-        id: 13,
-        productName: "Kids' Denim Jacket",
-        description: "Washed denim, full sleeve",
-        barcode: "8801234567892",
-        challanQty: 24,
-        receivedQty: 24,
-        price: 950,
-      },
-    ],
-  },
-  {
-    id: 2,
-    type: "Stock Transfer",
-    challanNo: "ARTSND-2608015042",
-    challanTime: "30 Aug 2026, 12:15 PM",
-    deliveryFrom: "Uttara Branch",
-    items: [
-      {
-        id: 21,
-        productName: "Men's Polo T-Shirt",
-        description: "Cotton pique, navy",
-        barcode: "8801234567893",
-        challanQty: 60,
-        receivedQty: 60,
-        price: 1250,
-      },
-      {
-        id: 22,
-        productName: "Women's Panjabi",
-        description: "Embroidered cotton, beige",
-        barcode: "8801234567894",
-        challanQty: 45,
-        receivedQty: 45,
-        price: 1680,
-      },
-      {
-        id: 23,
-        productName: "Women's Leggings",
-        description: "Stretchable, black",
-        barcode: "8801234567895",
-        challanQty: 30,
-        receivedQty: 30,
-        price: 2100,
-      },
-    ],
-  },
-  {
-    id: 3,
-    type: "Pricing",
-    challanNo: "ARTSND-2608015047",
-    challanTime: "31 Aug 2026, 04:05 PM",
-    deliveryFrom: "Central Warehouse",
-    items: [
-      {
-        id: 31,
-        productName: "Men's Formal Trousers",
-        description: "Slim fit, charcoal grey",
-        barcode: "8801234567896",
-        challanQty: 90,
-        receivedQty: 90,
-        price: 450,
-      },
-      {
-        id: 32,
-        productName: "Women's Maxi Dress",
-        description: "Rayon, boho print",
-        barcode: "8801234567897",
-        challanQty: 55,
-        receivedQty: 55,
-        price: 380,
-      },
-      {
-        id: 33,
-        productName: "Baby Hoodie Set",
-        description: "Fleece, 2-piece, pastel",
-        barcode: "8801234567898",
-        challanQty: 40,
-        receivedQty: 40,
-        price: 890,
-      },
-    ],
-  },
-];
-
-
-// ======================================================
-// REUSABLE STYLES
-// ======================================================
+/* ================================================================
+   STYLES
+================================================================ */
 
 const smallInputClass = `
   h-8
@@ -252,19 +122,10 @@ const secondaryButtonClass = `
   active:scale-[0.98]
 `;
 
-const typeBadgeStyles: Record<
-  DeliveryType,
-  string
-> = {
-  Factory: "bg-[#E8F5ED] text-[#0E9351]",
-  "Stock Transfer": "bg-[#F7EFD8] text-[#9A7B1F]",
-  Pricing: "bg-[#F3F4F2] text-[#66736B]",
-};
 
-
-// ======================================================
-// FIELD
-// ======================================================
+/* ================================================================
+   FIELD
+================================================================ */
 
 interface FieldProps {
   label: string;
@@ -277,67 +138,79 @@ function Field({
   icon,
   children,
 }: FieldProps) {
-
   return (
     <div className="min-w-0">
-
-      <label className="
-        mb-1
-        flex
-        items-center
-        gap-1
-        text-[10px]
-        font-semibold
-        text-[#66736B]
-      ">
-
+      <label
+        className="
+          mb-1
+          flex
+          items-center
+          gap-1
+          text-[10px]
+          font-semibold
+          text-[#66736B]
+        "
+      >
         {icon}
-
         {label}
-
       </label>
 
       {children}
-
     </div>
   );
 }
 
 
-// ======================================================
-// TYPE BADGE
-// ======================================================
+/* ================================================================
+   TYPE BADGE
+================================================================ */
 
 function TypeBadge({
   type,
 }: {
-  type: DeliveryType;
+  type: string;
 }) {
+  let badgeClass =
+    "bg-[#F3F4F2] text-[#66736B]";
+
+  if (type === "Factory") {
+    badgeClass =
+      "bg-[#E8F5ED] text-[#0E9351]";
+  } else if (type === "Stock Transfer") {
+    badgeClass =
+      "bg-[#F7EFD8] text-[#9A7B1F]";
+  } else if (type === "Pricing") {
+    badgeClass =
+      "bg-[#F3F4F2] text-[#66736B]";
+  }
 
   return (
-    <span className={`
-      inline-flex
-      items-center
-      rounded-full
-      px-2
-      py-0.5
-      text-[9px]
-      font-semibold
-      ${typeBadgeStyles[type]}
-    `}>
-      {type}
+    <span
+      className={`
+        inline-flex
+        items-center
+        rounded-full
+        px-2
+        py-0.5
+        text-[9px]
+        font-semibold
+        ${badgeClass}
+      `}
+    >
+      {type || "Unknown"}
     </span>
   );
 }
 
 
-// ======================================================
-// PENDING CHALLAN MODAL
-// ======================================================
+/* ================================================================
+   PENDING CHALLAN MODAL
+================================================================ */
 
 interface PendingChallanModalProps {
   open: boolean;
   challans: PendingChallan[];
+  loading: boolean;
   onClose: () => void;
   onSelect: (challan: PendingChallan) => void;
 }
@@ -345,10 +218,10 @@ interface PendingChallanModalProps {
 function PendingChallanModal({
   open,
   challans,
+  loading,
   onClose,
   onSelect,
 }: PendingChallanModalProps) {
-
   if (!open) {
     return null;
   }
@@ -375,7 +248,6 @@ function PendingChallanModal({
         }
       }}
     >
-
       <div
         className="
           flex
@@ -395,60 +267,60 @@ function PendingChallanModal({
         }}
       >
 
-        {/* MODAL HEADER */}
+        {/* HEADER */}
 
-        <div className="
-          flex
-          shrink-0
-          items-center
-          justify-between
-          border-b
-          border-[#E6EAE3]
-          bg-[#F1F8F3]
-          px-4
-          py-3
-        ">
-
-          <div className="
+        <div
+          className="
             flex
+            shrink-0
             items-center
-            gap-2
-          ">
+            justify-between
+            border-b
+            border-[#E6EAE3]
+            bg-[#F1F8F3]
+            px-4
+            py-3
+          "
+        >
+          <div className="flex items-center gap-2">
 
-            <div className="
-              flex
-              h-7
-              w-7
-              items-center
-              justify-center
-              rounded-md
-              bg-[#10673E]
-              text-white
-            ">
+            <div
+              className="
+                flex
+                h-7
+                w-7
+                items-center
+                justify-center
+                rounded-md
+                bg-[#10673E]
+                text-white
+              "
+            >
               <ClipboardList size={14} />
             </div>
 
             <div>
-
-              <h2 className="
-                text-sm
-                font-semibold
-                text-[#17231D]
-              ">
+              <h2
+                className="
+                  text-sm
+                  font-semibold
+                  text-[#17231D]
+                "
+              >
                 Pending Challans
               </h2>
 
-              <p className="
-                text-[9px]
-                text-[#66736B]
-              ">
-                {challans.length} challans
-                awaiting receive — click a row
-                to select
+              <p
+                className="
+                  text-[9px]
+                  text-[#66736B]
+                "
+              >
+                {loading
+                  ? "Loading challans..."
+                  : `${challans.length} challans awaiting receive`}
               </p>
-
             </div>
-
           </div>
 
           <button
@@ -465,141 +337,175 @@ function PendingChallanModal({
           >
             <X size={18} />
           </button>
-
         </div>
 
 
-        {/* MODAL BODY */}
+        {/* BODY */}
 
-        <div className="
-          min-h-0
-          flex-1
-          overflow-auto
-        ">
+        <div className="min-h-0 flex-1 overflow-auto">
 
-          <table className="
-            w-full
-            min-w-[560px]
-            border-collapse
-            text-xs
-          ">
+          {loading ? (
+            <div
+              className="
+                flex
+                min-h-[220px]
+                items-center
+                justify-center
+                text-xs
+                text-[#66736B]
+              "
+            >
+              Loading pending challans...
+            </div>
+          ) : challans.length === 0 ? (
+            <div
+              className="
+                flex
+                min-h-[220px]
+                flex-col
+                items-center
+                justify-center
+                text-[#9AA29C]
+              "
+            >
+              <ClipboardList size={30} />
 
-            <thead className="
-              sticky
-              top-0
-              z-10
-              bg-[#10673E]
-              text-white
-            ">
+              <p className="mt-2 text-xs font-medium">
+                No pending challans found
+              </p>
 
-              <tr>
+              <p className="mt-1 text-[10px]">
+                All challans may already be received.
+              </p>
+            </div>
+          ) : (
+            <table
+              className="
+                w-full
+                min-w-[560px]
+                border-collapse
+                text-xs
+              "
+            >
+              <thead
+                className="
+                  sticky
+                  top-0
+                  z-10
+                  bg-[#10673E]
+                  text-white
+                "
+              >
+                <tr>
+                  <th
+                    className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
+                    "
+                  >
+                    Type
+                  </th>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
-                ">
-                  Type
-                </th>
+                  <th
+                    className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
+                    "
+                  >
+                    Challan No.
+                  </th>
 
-                <th className="
-                  px-3
-                  py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
-                ">
-                  Challan No.
-                </th>
-
-                <th className="
-                  px-3
-                  py-2.5
-                  text-left
-                  text-[10px]
-                  font-semibold
-                ">
-                  Challan Time
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {challans.map((challan) => (
-
-                <tr
-                  key={challan.id}
-                  onClick={() =>
-                    onSelect(challan)
-                  }
-                  title="Click to select this challan"
-                  className="
-                    cursor-pointer
-                    border-b
-                    border-[#ECEFEA]
-                    transition-colors
-                    hover:bg-[#F1F8F3]
-                  "
-                >
-
-                  <td className="
-                    px-3
-                    py-2.5
-                  ">
-                    <TypeBadge
-                      type={challan.type}
-                    />
-                  </td>
-
-                  <td className="
-                    px-3
-                    py-2.5
-                    font-mono
-                    text-[11px]
-                    font-semibold
-                    text-[#17231D]
-                  ">
-                    {challan.challanNo}
-                  </td>
-
-                  <td className="
-                    px-3
-                    py-2.5
-                    text-[#66736B]
-                  ">
-                    {challan.challanTime}
-                  </td>
-
+                  <th
+                    className="
+                      px-3
+                      py-2.5
+                      text-left
+                      text-[10px]
+                      font-semibold
+                    "
+                  >
+                    Challan Time
+                  </th>
                 </tr>
-              ))}
+              </thead>
 
-            </tbody>
+              <tbody>
+                {challans.map((challan) => (
+                  <tr
+                    key={challan.referenceNumber}
+                    onClick={() => onSelect(challan)}
+                    title="Click to select this challan"
+                    className="
+                      cursor-pointer
+                      border-b
+                      border-[#ECEFEA]
+                      transition-colors
+                      hover:bg-[#F1F8F3]
+                    "
+                  >
+                    <td className="px-3 py-2.5">
+                      <TypeBadge
+                        type={challan.productInType}
+                      />
+                    </td>
 
-          </table>
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+                        font-mono
+                        text-[11px]
+                        font-semibold
+                        text-[#17231D]
+                      "
+                    >
+                      {challan.referenceNumber}
+                    </td>
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+                        text-[#66736B]
+                      "
+                    >
+                      {challan.inDate
+                        ? new Date(
+                            challan.inDate
+                          ).toLocaleString()
+                        : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
         </div>
 
 
-        {/* MODAL FOOTER */}
+        {/* FOOTER */}
 
-        <div className="
-          flex
-          shrink-0
-          items-center
-          justify-end
-          gap-2
-          border-t
-          border-[#E6EAE3]
-          bg-[#FAFBF9]
-          px-4
-          py-2.5
-        ">
-
+        <div
+          className="
+            flex
+            shrink-0
+            items-center
+            justify-end
+            gap-2
+            border-t
+            border-[#E6EAE3]
+            bg-[#FAFBF9]
+            px-4
+            py-2.5
+          "
+        >
           <button
             type="button"
             onClick={onClose}
@@ -607,39 +513,54 @@ function PendingChallanModal({
           >
             Close
           </button>
-
         </div>
 
       </div>
-
     </div>
   );
 }
 
 
-// ======================================================
-// PRODUCT RECEIVE (MAIN)
-// ======================================================
+/* ================================================================
+   PRODUCT RECEIVE
+================================================================ */
 
 function ProductReceive() {
 
-  // ====================================================
-  // FORM STATE
-  // ====================================================
+  /* ==============================================================
+     FORM STATE
+  ============================================================== */
 
   const [deliveryType, setDeliveryType] =
-    useState<DeliveryType | "">("");
+    useState<string>("");
 
   const [orderNo, setOrderNo] =
-    useState("ARTSND-2608015038");
+    useState("");
 
-  const [deliveryFrom, setDeliveryFrom] =
-    useState("Head Office");
+  /*
+   * Your current API does NOT return deliveryFrom.
+   *
+   * Therefore we intentionally do not use a fake/static value
+   * such as "Head Office".
+   */
+  const [deliveryFrom] =
+    useState("");
 
 
-  // ====================================================
-  // LOADED CHALLAN STATE
-  // ====================================================
+  /* ==============================================================
+     PENDING CHALLAN STATE
+  ============================================================== */
+
+  const [pendingChallans, setPendingChallans] =
+    useState<PendingChallan[]>([]);
+
+  const [isLoadingChallans, setIsLoadingChallans] =
+    useState(false);
+
+
+  /* ==============================================================
+     ACTIVE CHALLAN
+  ============================================================== */
 
   const [activeChallan, setActiveChallan] =
     useState<PendingChallan | null>(null);
@@ -647,31 +568,48 @@ function ProductReceive() {
   const [items, setItems] =
     useState<ReceiveItem[]>([]);
 
+  const [isLoadingProducts, setIsLoadingProducts] =
+    useState(false);
+
+
+  /* ==============================================================
+     REMARKS
+  ============================================================== */
+
+  const [sendRemarks, setSendRemarks] =
+    useState("");
+
   const [remarks, setRemarks] =
     useState("");
 
 
-  // ====================================================
-  // UI STATE
-  // ====================================================
+  /* ==============================================================
+     UI STATE
+  ============================================================== */
 
   const [isModalOpen, setIsModalOpen] =
     useState(false);
 
-  const [toast, setToast] = useState<Toast>(null);
+  const [isReceiving, setIsReceiving] =
+    useState(false);
+
+  const [toast, setToast] =
+    useState<Toast>(null);
 
 
-  // ====================================================
-  // TOAST
-  // ====================================================
+  /* ==============================================================
+     TOAST
+  ============================================================== */
 
   const showToast = useCallback(
     (
       message: string,
       type: "success" | "error"
     ) => {
-
-      setToast({ message, type });
+      setToast({
+        message,
+        type,
+      });
 
       window.setTimeout(() => {
         setToast(null);
@@ -681,170 +619,438 @@ function ProductReceive() {
   );
 
 
-  // ====================================================
-  // LOAD CHALLAN
-  // ====================================================
+  /* ==============================================================
+     LOAD PENDING CHALLANS
+  ============================================================== */
 
-  const loadChallan = (
+  const loadPendingChallans = useCallback(
+    async () => {
+      try {
+        setIsLoadingChallans(true);
+
+        const response =
+          await getPendingChallans();
+
+        if (!response.success) {
+          showToast(
+            response.message ||
+              "Failed to load pending challans",
+            "error"
+          );
+
+          setPendingChallans([]);
+          return;
+        }
+
+        setPendingChallans(
+          response.data
+        );
+
+      } catch (error) {
+        console.error(
+          "Failed to load pending challans:",
+          error
+        );
+
+        showToast(
+          "Failed to load pending challans",
+          "error"
+        );
+
+        setPendingChallans([]);
+
+      } finally {
+        setIsLoadingChallans(false);
+      }
+    },
+    [showToast]
+  );
+
+
+  /* ==============================================================
+     INITIAL API LOAD
+  ============================================================== */
+
+  useEffect(() => {
+    loadPendingChallans();
+  }, [loadPendingChallans]);
+
+
+  /* ==============================================================
+     DELIVERY TYPE OPTIONS
+  ============================================================== */
+
+  const deliveryTypeOptions = Array.from(
+    new Set(
+      pendingChallans
+        .map(
+          (challan) =>
+            challan.productInType
+        )
+        .filter(Boolean)
+    )
+  );
+
+
+  /* ==============================================================
+     LOAD PRODUCT DETAILS
+  ============================================================== */
+
+  const loadChallan = async (
     challan: PendingChallan
   ) => {
 
-    setDeliveryType(challan.type);
-    setOrderNo(challan.challanNo);
-    setDeliveryFrom(challan.deliveryFrom);
+    try {
 
-    setActiveChallan(challan);
+      setIsLoadingProducts(true);
 
-    setItems(
-      challan.items.map((item) => ({
-        ...item,
-        receivedQty: item.challanQty,
-      }))
-    );
+      setDeliveryType(
+        challan.productInType
+      );
+
+      setOrderNo(
+        challan.referenceNumber
+      );
+
+      setSendRemarks(
+        challan.senderRemarks ?? ""
+      );
+
+      setActiveChallan(challan);
+
+      setItems([]);
+
+      /*
+       * The pending-chalans API does not
+       * contain product items.
+       *
+       * Therefore we call:
+       *
+       * GET /by-reference/{referenceNumber}
+       */
+      const response =
+        await getProductReceiveByReference(
+          challan.referenceNumber
+        );
+
+      if (!response.success) {
+
+        showToast(
+          response.message ||
+            "Failed to load product details",
+          "error"
+        );
+
+        setItems([]);
+
+        return;
+      }
+
+      /*
+       * Use the quantity returned by the API.
+       *
+       * If the API returns receivedQty = 0,
+       * it remains 0.
+       *
+       * We do NOT use static challanQty here.
+       */
+      setItems(
+        response.data.map((item) => ({
+          ...item,
+          receivedQty:
+            Number(item.receivedQty) || 0,
+        }))
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Failed to load challan details:",
+        error
+      );
+
+      showToast(
+        "Failed to load challan details",
+        "error"
+      );
+
+      setItems([]);
+
+    } finally {
+
+      setIsLoadingProducts(false);
+
+    }
   };
 
-  const handleLoad = () => {
 
-    const order = orderNo.trim();
+  /* ==============================================================
+     LOAD BUTTON
+  ============================================================== */
+
+  const handleLoad = async () => {
+
+    const order =
+      orderNo.trim();
 
     if (!order) {
+
       showToast(
         "Enter a Deliver Order No. first",
         "error"
       );
+
       return;
     }
 
-    const match = pendingChallans.find(
-      (challan) =>
-        challan.challanNo.toLowerCase() ===
-        order.toLowerCase()
-    );
+    const match =
+      pendingChallans.find(
+        (challan) =>
+          challan.referenceNumber
+            .toLowerCase() ===
+          order.toLowerCase()
+      );
 
     if (!match) {
+
       showToast(
         "No pending challan found for this order no.",
         "error"
       );
+
       return;
     }
 
-    loadChallan(match);
+    await loadChallan(match);
 
     showToast(
-      `Challan ${match.challanNo} loaded`,
+      `Challan ${match.referenceNumber} loaded`,
       "success"
     );
   };
 
 
-  // ====================================================
-  // CLEAR ORDER NO
-  // ====================================================
+  /* ==============================================================
+     CLEAR ORDER
+  ============================================================== */
 
   const handleClearOrder = () => {
 
     setOrderNo("");
+
     setDeliveryType("");
-    setDeliveryFrom("");
 
     setActiveChallan(null);
+
     setItems([]);
+
+    setSendRemarks("");
+
+    setRemarks("");
   };
 
 
-  // ====================================================
-  // MODAL SELECT
-  // ====================================================
+  /* ==============================================================
+     SELECT CHALLAN FROM MODAL
+  ============================================================== */
 
-  const handleSelectChallan = (
+  const handleSelectChallan = async (
     challan: PendingChallan
   ) => {
 
-    loadChallan(challan);
     setIsModalOpen(false);
 
+    await loadChallan(challan);
+
     showToast(
-      `Challan ${challan.challanNo} loaded`,
+      `Challan ${challan.referenceNumber} loaded`,
       "success"
     );
   };
 
 
-  // ====================================================
-  // RECEIVED QTY
-  // ====================================================
+  /* ==============================================================
+     RECEIVED QUANTITY
+  ============================================================== */
 
   const handleReceivedQty = (
-    id: number,
+    productId: number,
     value: string
   ) => {
 
-    setItems((previousItems) =>
-      previousItems.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              receivedQty: Math.max(
-                0,
-                Number(value) || 0
-              ),
-            }
-          : item
-      )
+    const quantity =
+      Math.max(
+        0,
+        Number(value) || 0
+      );
+
+    setItems(
+      (previousItems) =>
+        previousItems.map(
+          (item) =>
+            item.productId ===
+            productId
+              ? {
+                  ...item,
+                  receivedQty:
+                    quantity,
+                }
+              : item
+        )
     );
   };
 
 
-  // ====================================================
-  // CALCULATIONS
-  // ====================================================
+  /* ==============================================================
+     CALCULATIONS
+  ============================================================== */
 
-  const totalChallanQty = items.reduce(
-    (total, item) =>
-      total + item.challanQty,
-    0
-  );
+  const totalChallanQty =
+    items.reduce(
+      (total, item) =>
+        total +
+        (Number(item.challanQty) || 0),
+      0
+    );
 
-  const totalReceivedQty = items.reduce(
-    (total, item) =>
-      total + item.receivedQty,
-    0
-  );
+  const totalReceivedQty =
+    items.reduce(
+      (total, item) =>
+        total +
+        (Number(item.receivedQty) || 0),
+      0
+    );
 
 
-  // ====================================================
-  // RECEIVE
-  // ====================================================
+  /* ==============================================================
+     RECEIVE
+  ============================================================== */
 
-  const handleReceive = () => {
+  const handleReceive = async () => {
 
-    if (items.length === 0) {
+    if (!activeChallan) {
+
       showToast(
-        "Nothing to receive — load a challan first",
+        "Load a challan first",
         "error"
       );
+
       return;
     }
 
-    showToast(
-      `Received ${items.length} items (${totalReceivedQty} units)`,
-      "success"
-    );
+    if (items.length === 0) {
+
+      showToast(
+        "Nothing to receive",
+        "error"
+      );
+
+      return;
+    }
+
+    /*
+     * IMPORTANT:
+     *
+     * Your current backend contract only accepts:
+     *
+     * {
+     *   referenceNumber,
+     *   receiverRemarks
+     * }
+     *
+     * It does NOT accept receivedQty.
+     */
+
+    try {
+
+      setIsReceiving(true);
+
+      const response = await receiveChalan({
+  master: {
+    referenceNumber: activeChallan.referenceNumber,
+    receiverRemarks: remarks.trim(),
+  },
+
+  details: items.map((item) => ({
+    productId: item.productId,
+    barcode: item.barcode,
+    receivedQty: item.receivedQty,
+  })),
+});
+
+      if (!response.success) {
+
+        showToast(
+          response.message ||
+            "Failed to receive challan",
+          "error"
+        );
+
+        return;
+      }
+
+      showToast(
+        response.message ||
+          `Challan ${activeChallan.referenceNumber} received successfully`,
+        "success"
+      );
+
+      /*
+       * Clear current challan.
+       */
+      setActiveChallan(null);
+
+      setItems([]);
+
+      setOrderNo("");
+
+      setDeliveryType("");
+
+      setSendRemarks("");
+
+      setRemarks("");
+
+      /*
+       * Refresh pending challans.
+       *
+       * The received challan should disappear
+       * if the backend marks it as received.
+       */
+      await loadPendingChallans();
+
+    } catch (error) {
+
+      console.error(
+        "Failed to receive challan:",
+        error
+      );
+
+      showToast(
+        "Failed to receive challan",
+        "error"
+      );
+
+    } finally {
+
+      setIsReceiving(false);
+
+    }
   };
 
 
-  // ====================================================
-  // DOWNLOAD / EXPORT
-  // ====================================================
+  /* ==============================================================
+     DOWNLOAD / EXPORT
+  ============================================================== */
 
   const handleDownload = () => {
 
     if (items.length === 0) {
+
       showToast(
         "Nothing to export yet",
         "error"
       );
+
       return;
     }
 
@@ -857,14 +1063,15 @@ function ProductReceive() {
       "Price",
     ];
 
-    const rows = items.map((item) => [
-      item.productName,
-      item.description,
-      item.barcode,
-      String(item.challanQty),
-      String(item.receivedQty),
-      item.price.toFixed(2),
-    ]);
+    const rows =
+      items.map((item) => [
+        item.shortName,
+        item.fullName,
+        item.barcode,
+        String(item.challanQty),
+        String(item.receivedQty),
+        Number(item.salesPrice).toFixed(2),
+      ]);
 
     const totalsRow = [
       "Total Quantity",
@@ -875,26 +1082,46 @@ function ProductReceive() {
       "",
     ];
 
-    const csv = [header, ...rows, totalsRow]
-      .map((row) =>
-        row
-          .map((cell) =>
-            `"${cell.replace(/"/g, '""')}"`
-          )
-          .join(",")
-      )
-      .join("\n");
+    const csv =
+      [header, ...rows, totalsRow]
+        .map((row) =>
+          row
+            .map(
+              (cell) =>
+                `"${String(cell).replace(
+                  /"/g,
+                  '""'
+                )}"`
+            )
+            .join(",")
+        )
+        .join("\n");
 
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob =
+      new Blob(
+        [csv],
+        {
+          type:
+            "text/csv;charset=utf-8;",
+        }
+      );
 
-    const url = URL.createObjectURL(blob);
+    const url =
+      URL.createObjectURL(blob);
 
-    const link = document.createElement("a");
+    const link =
+      document.createElement("a");
+
     link.href = url;
-    link.download = "product-receive.csv";
+
+    link.download =
+      "product-receive.csv";
+
+    document.body.appendChild(link);
+
     link.click();
+
+    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
 
@@ -905,94 +1132,111 @@ function ProductReceive() {
   };
 
 
-  // ====================================================
-  // UI
-  // ====================================================
+  /* ==============================================================
+     UI
+  ============================================================== */
 
   return (
-    <div className="
-      flex
-      h-full
-      min-h-0
-      w-full
-      flex-col
-      overflow-hidden
-      bg-[#F5F7F3]
-      text-[#17231D]
-    ">
+    <div
+      className="
+        flex
+        h-full
+        min-h-0
+        w-full
+        flex-col
+        overflow-hidden
+        bg-[#F5F7F3]
+        text-[#17231D]
+      "
+    >
 
       <style>{`
         @keyframes pr-fade {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from {
+            opacity: 0;
+          }
+
+          to {
+            opacity: 1;
+          }
         }
+
         @keyframes pr-pop {
           from {
             opacity: 0;
-            transform: translateY(8px) scale(0.98);
+            transform:
+              translateY(8px)
+              scale(0.98);
           }
+
           to {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform:
+              translateY(0)
+              scale(1);
           }
         }
       `}</style>
 
 
-      {/* ================================================= */}
-      {/* PAGE HEADER */}
-      {/* ================================================= */}
+      {/* =========================================================
+          PAGE HEADER
+      ========================================================= */}
 
-      <header className="
-        flex
-        shrink-0
-        flex-wrap
-        items-center
-        justify-between
-        gap-2
-        border-b
-        border-[#DDE5DF]
-        bg-white
-        px-[clamp(8px,1vw,16px)]
-        py-2
-        shadow-[0_1px_2px_rgba(35,42,35,0.06)]
-      ">
-
-        <div className="
+      <header
+        className="
           flex
+          shrink-0
+          flex-wrap
           items-center
+          justify-between
           gap-2
-        ">
+          border-b
+          border-[#DDE5DF]
+          bg-white
+          px-[clamp(8px,1vw,16px)]
+          py-2
+          shadow-[0_1px_2px_rgba(35,42,35,0.06)]
+        "
+      >
 
-          <div className="
-            flex
-            h-8
-            w-8
-            items-center
-            justify-center
-            rounded-md
-            bg-[#10673E]
-            text-white
-          ">
+        <div className="flex items-center gap-2">
+
+          <div
+            className="
+              flex
+              h-8
+              w-8
+              items-center
+              justify-center
+              rounded-md
+              bg-[#10673E]
+              text-white
+            "
+          >
             <PackageCheck size={16} />
           </div>
 
           <div>
 
-            <h1 className="
-              text-sm
-              font-semibold
-              leading-none
-              text-[#17231D]
-            ">
+            <h1
+              className="
+                text-sm
+                font-semibold
+                leading-none
+                text-[#17231D]
+              "
+            >
               Product Receive
             </h1>
 
-            <p className="
-              mt-0.5
-              text-[9px]
-              text-[#66736B]
-            ">
+            <p
+              className="
+                mt-0.5
+                text-[9px]
+                text-[#66736B]
+              "
+            >
               Receive goods against pending
               challans
             </p>
@@ -1002,11 +1246,7 @@ function ProductReceive() {
         </div>
 
 
-        <div className="
-          flex
-          items-center
-          gap-1.5
-        ">
+        <div className="flex items-center gap-1.5">
 
           <button
             type="button"
@@ -1016,8 +1256,10 @@ function ProductReceive() {
             className={primaryButtonClass}
           >
             <ClipboardList size={13} />
+
             Pending Challan
           </button>
+
 
           <button
             type="button"
@@ -1025,6 +1267,7 @@ function ProductReceive() {
             className={secondaryButtonClass}
           >
             <Download size={13} />
+
             Download
           </button>
 
@@ -1033,26 +1276,30 @@ function ProductReceive() {
       </header>
 
 
-      {/* ================================================= */}
-      {/* FORM CONTROLS */}
-      {/* ================================================= */}
+      {/* =========================================================
+          FORM CONTROLS
+      ========================================================= */}
 
-      <section className="
-        shrink-0
-        border-b
-        border-[#DDE5DF]
-        bg-white
-        px-[clamp(8px,1vw,16px)]
-        py-2.5
-      ">
+      <section
+        className="
+          shrink-0
+          border-b
+          border-[#DDE5DF]
+          bg-white
+          px-[clamp(8px,1vw,16px)]
+          py-2.5
+        "
+      >
 
-        <div className="
-          grid
-          grid-cols-1
-          gap-2
-          md:grid-cols-2
-          xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1.2fr)]
-        ">
+        <div
+          className="
+            grid
+            grid-cols-1
+            gap-2
+            md:grid-cols-2
+            xl:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1.2fr)]
+          "
+        >
 
           {/* DELIVERY TYPE */}
 
@@ -1065,58 +1312,73 @@ function ProductReceive() {
               value={deliveryType}
               onChange={(e) =>
                 setDeliveryType(
-                  e.target.value as DeliveryType | ""
+                  e.target.value
                 )
               }
               className={`
                 ${smallInputClass}
-                ${deliveryType ? "" : "text-[#9AA29C]"}
+                ${
+                  deliveryType
+                    ? ""
+                    : "text-[#9AA29C]"
+                }
               `}
             >
-              <option value="" disabled>
+
+              <option value="">
                 Select delivery type
               </option>
 
-              {deliveryTypeOptions.map((option) => (
-                <option
-                  key={option}
-                  value={option}
-                >
-                  {option}
-                </option>
-              ))}
+              {deliveryTypeOptions.map(
+                (option) => (
+                  <option
+                    key={option}
+                    value={option}
+                  >
+                    {option}
+                  </option>
+                )
+              )}
 
             </select>
 
           </Field>
 
 
-          {/* DELIVER ORDER NO + LOAD */}
+          {/* ORDER NO */}
 
           <Field
             label="Deliver Order No."
             icon={<Hash size={13} />}
           >
 
-            <div className="
-              flex
-              items-center
-              gap-1.5
-            ">
+            <div
+              className="
+                flex
+                items-center
+                gap-1.5
+              "
+            >
 
-              <div className="
-                relative
-                min-w-0
-                flex-1
-              ">
+              <div
+                className="
+                  relative
+                  min-w-0
+                  flex-1
+                "
+              >
 
                 <input
                   value={orderNo}
                   onChange={(e) =>
-                    setOrderNo(e.target.value)
+                    setOrderNo(
+                      e.target.value
+                    )
                   }
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (
+                      e.key === "Enter"
+                    ) {
                       handleLoad();
                     }
                   }}
@@ -1125,14 +1387,15 @@ function ProductReceive() {
                     pr-8
                     font-mono
                   `}
-                  placeholder="e.g. ARTSND-2608015038"
+                  placeholder="e.g. VR2622-1"
                 />
 
                 {orderNo && (
-
                   <button
                     type="button"
-                    onClick={handleClearOrder}
+                    onClick={
+                      handleClearOrder
+                    }
                     title="Clear"
                     className="
                       absolute
@@ -1153,14 +1416,17 @@ function ProductReceive() {
                   >
                     <X size={13} />
                   </button>
-
                 )}
 
               </div>
 
+
               <button
                 type="button"
                 onClick={handleLoad}
+                disabled={
+                  isLoadingProducts
+                }
                 className="
                   inline-flex
                   h-8
@@ -1178,10 +1444,15 @@ function ProductReceive() {
                   transition
                   hover:bg-[#10673E]
                   active:scale-[0.98]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
                 "
               >
                 <Search size={13} />
-                Load
+
+                {isLoadingProducts
+                  ? "Loading..."
+                  : "Load"}
               </button>
 
             </div>
@@ -1191,361 +1462,472 @@ function ProductReceive() {
 
           {/* DELIVERY FROM */}
 
-          <Field
-            label="Delivery From"
-            icon={<Warehouse size={13} />}
-          >
+         
 
-            <input
-              readOnly
-              value={deliveryFrom}
-              placeholder="Load a challan"
-              className={readOnlyInputClass}
-            />
 
-          </Field>
+          {/* SENDER REMARKS */}
+
+      
 
         </div>
 
       </section>
 
 
-      {/* ================================================= */}
-      {/* PRODUCT TABLE */}
-      {/* ================================================= */}
+      {/* =========================================================
+          PRODUCT TABLE
+      ========================================================= */}
 
-      <section className="
-        flex
-        min-h-0
-        min-w-0
-        flex-1
-        flex-col
-        overflow-hidden
-        bg-white
-      ">
+      <section
+        className="
+          flex
+          min-h-0
+          min-w-0
+          flex-1
+          flex-col
+          overflow-hidden
+          bg-white
+        "
+      >
 
         {activeChallan ? (
 
           <>
 
-            {/* TABLE HEADER STRIP */}
+            {/* TABLE HEADER */}
 
-            <div className="
-              flex
-              h-9
-              shrink-0
-              items-center
-              justify-between
-              border-b
-              border-[#DDE5DF]
-              bg-[#F1F8F3]
-              px-[clamp(8px,1vw,16px)]
-            ">
-
-              <div className="
+            <div
+              className="
                 flex
+                h-9
+                shrink-0
                 items-center
-                gap-2
-              ">
+                justify-between
+                border-b
+                border-[#DDE5DF]
+                bg-[#F1F8F3]
+                px-[clamp(8px,1vw,16px)]
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-2
+                "
+              >
 
                 <PackageCheck
                   size={14}
                   className="text-[#10673E]"
                 />
 
-                <span className="
-                  text-xs
-                  font-semibold
-                  text-[#17231D]
-                ">
+                <span
+                  className="
+                    text-xs
+                    font-semibold
+                    text-[#17231D]
+                  "
+                >
                   Product Table
                 </span>
 
                 <TypeBadge
-                  type={activeChallan.type}
+                  type={
+                    activeChallan.productInType
+                  }
                 />
 
-                <span className="
-                  rounded
-                  border
-                  border-[#ECEFEA]
-                  bg-white
-                  px-1.5
-                  py-0.5
-                  font-mono
-                  text-[9px]
-                  text-[#66736B]
-                ">
-                  {activeChallan.challanNo}
+                <span
+                  className="
+                    rounded
+                    border
+                    border-[#ECEFEA]
+                    bg-white
+                    px-1.5
+                    py-0.5
+                    font-mono
+                    text-[9px]
+                    text-[#66736B]
+                  "
+                >
+                  {
+                    activeChallan.referenceNumber
+                  }
                 </span>
 
               </div>
 
-              <span className="
-                text-[10px]
-                text-[#66736B]
-              ">
-                {items.length} items · {totalReceivedQty} / {totalChallanQty} units
+
+              <span
+                className="
+                  text-[10px]
+                  text-[#66736B]
+                "
+              >
+                {items.length} items ·{" "}
+                {totalReceivedQty} /{" "}
+                {totalChallanQty} units
               </span>
 
             </div>
 
 
-            {/* TABLE SCROLL AREA */}
+            {/* TABLE */}
 
-            <div className="
-              min-h-0
-              flex-1
-              overflow-auto
-            ">
+            <div
+              className="
+                min-h-0
+                flex-1
+                overflow-auto
+              "
+            >
 
-              <table className="
-                w-full
-                min-w-[760px]
-                border-collapse
-                text-xs
-              ">
+              {isLoadingProducts ? (
 
-                <thead className="
-                  sticky
-                  top-0
-                  z-10
-                  bg-[#10673E]
-                  text-white
-                ">
+                <div
+                  className="
+                    flex
+                    h-full
+                    min-h-[200px]
+                    items-center
+                    justify-center
+                    text-xs
+                    text-[#66736B]
+                  "
+                >
+                  Loading product details...
+                </div>
 
-                  <tr>
+              ) : items.length === 0 ? (
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-left
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Product Name
-                    </th>
+                <div
+                  className="
+                    flex
+                    h-full
+                    min-h-[200px]
+                    flex-col
+                    items-center
+                    justify-center
+                    text-[#9AA29C]
+                  "
+                >
+                  <Boxes
+                    size={30}
+                    strokeWidth={1.5}
+                  />
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-left
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Description
-                    </th>
+                  <p
+                    className="
+                      mt-2
+                      text-xs
+                      font-medium
+                    "
+                  >
+                    No products found
+                  </p>
+                </div>
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-left
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Barcode
-                    </th>
+              ) : (
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-center
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Challan Qty
-                    </th>
+                <table
+                  className="
+                    w-full
+                    min-w-[760px]
+                    border-collapse
+                    text-xs
+                  "
+                >
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-center
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Received Qty
-                    </th>
+                  <thead
+                    className="
+                      sticky
+                      top-0
+                      z-10
+                      bg-[#10673E]
+                      text-white
+                    "
+                  >
 
-                    <th className="
-                      px-3
-                      py-2.5
-                      text-right
-                      text-[10px]
-                      font-semibold
-                    ">
-                      Price
-                    </th>
+                    <tr>
 
-                  </tr>
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-left
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Product Name
+                      </th>
 
-                </thead>
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-left
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Description
+                      </th>
 
-                <tbody>
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-left
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Barcode
+                      </th>
 
-                  {items.map((item) => (
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-center
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Challan Qty
+                      </th>
 
-                    <tr
-                      key={item.id}
-                      className="
-                        border-b
-                        border-[#ECEFEA]
-                        transition-colors
-                        hover:bg-[#F1F8F3]
-                      "
-                    >
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-center
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Received Qty
+                      </th>
 
-                      <td className="
-                        px-3
-                        py-2
-                        font-medium
-                        text-[#17231D]
-                      ">
-                        {item.productName}
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        text-[#66736B]
-                      ">
-                        {item.description}
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        font-mono
-                        text-[11px]
-                        text-[#66736B]
-                      ">
-                        {item.barcode}
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        text-center
-                        font-medium
-                        tabular-nums
-                        text-[#66736B]
-                      ">
-                        {item.challanQty}
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        text-center
-                      ">
-
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.receivedQty}
-                          onChange={(e) =>
-                            handleReceivedQty(
-                              item.id,
-                              e.target.value
-                            )
-                          }
-                          className="
-                            h-7
-                            w-16
-                            rounded-md
-                            border
-                            border-[#DDE5DF]
-                            bg-white
-                            px-1.5
-                            text-center
-                            text-xs
-                            font-semibold
-                            tabular-nums
-                            text-[#17231D]
-                            outline-none
-                            transition
-                            focus:border-[#0E9351]
-                            focus:ring-2
-                            focus:ring-[#0E9351]/15
-                          "
-                        />
-
-                      </td>
-
-                      <td className="
-                        px-3
-                        py-2
-                        text-right
-                        font-medium
-                        tabular-nums
-                        text-[#17231D]
-                      ">
-                        {item.price.toFixed(2)}
-                      </td>
+                      <th
+                        className="
+                          px-3
+                          py-2.5
+                          text-right
+                          text-[10px]
+                          font-semibold
+                        "
+                      >
+                        Price
+                      </th>
 
                     </tr>
-                  ))}
 
-                </tbody>
+                  </thead>
 
-                <tfoot className="
-                  sticky
-                  bottom-0
-                  z-10
-                  border-t-2
-                  border-[#10673E]
-                  bg-[#F1F8F3]
-                ">
 
-                  <tr>
+                  <tbody>
 
-                    <td
-                      colSpan={3}
-                      className="
-                        px-3
-                        py-2.5
-                        text-left
-                        text-xs
-                        font-bold
-                        text-[#17231D]
-                      "
-                    >
-                      Total Quantity
-                    </td>
+                    {items.map(
+                      (item) => (
+                        <tr
+                          key={
+                            item.productId
+                          }
+                          className="
+                            border-b
+                            border-[#ECEFEA]
+                            transition-colors
+                            hover:bg-[#F1F8F3]
+                          "
+                        >
 
-                    <td className="
-                      px-3
-                      py-2.5
-                      text-center
-                      text-xs
-                      font-bold
-                      tabular-nums
-                      text-[#17231D]
-                    ">
-                      {totalChallanQty}
-                    </td>
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              font-medium
+                              text-[#17231D]
+                            "
+                          >
+                            {item.shortName}
+                          </td>
 
-                    <td className="
-                      px-3
-                      py-2.5
-                      text-center
-                      text-xs
-                      font-bold
-                      tabular-nums
-                      text-[#10673E]
-                    ">
-                      {totalReceivedQty}
-                    </td>
 
-                    <td className="
-                      px-3
-                      py-2.5
-                    " />
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              text-[#66736B]
+                            "
+                          >
+                            {item.fullName}
+                          </td>
 
-                  </tr>
 
-                </tfoot>
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              font-mono
+                              text-[11px]
+                              text-[#66736B]
+                            "
+                          >
+                            {item.barcode}
+                          </td>
 
-              </table>
+
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              text-center
+                              font-medium
+                              tabular-nums
+                              text-[#66736B]
+                            "
+                          >
+                            {item.challanQty}
+                          </td>
+
+
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              text-center
+                            "
+                          >
+
+                            <input
+                              type="number"
+                              min={0}
+                              value={
+                                item.receivedQty
+                              }
+                              onChange={(e) =>
+                                handleReceivedQty(
+                                  item.productId,
+                                  e.target.value
+                                )
+                              }
+                              className="
+                                h-7
+                                w-16
+                                rounded-md
+                                border
+                                border-[#DDE5DF]
+                                bg-white
+                                px-1.5
+                                text-center
+                                text-xs
+                                font-semibold
+                                tabular-nums
+                                text-[#17231D]
+                                outline-none
+                                transition
+                                focus:border-[#0E9351]
+                                focus:ring-2
+                                focus:ring-[#0E9351]/15
+                              "
+                            />
+
+                          </td>
+
+
+                          <td
+                            className="
+                              px-3
+                              py-2
+                              text-right
+                              font-medium
+                              tabular-nums
+                              text-[#17231D]
+                            "
+                          >
+                            {Number(
+                              item.salesPrice
+                            ).toFixed(2)}
+                          </td>
+
+                        </tr>
+                      )
+                    )}
+
+                  </tbody>
+
+
+                  <tfoot
+                    className="
+                      sticky
+                      bottom-0
+                      z-10
+                      border-t-2
+                      border-[#10673E]
+                      bg-[#F1F8F3]
+                    "
+                  >
+
+                    <tr>
+
+                      <td
+                        colSpan={3}
+                        className="
+                          px-3
+                          py-2.5
+                          text-left
+                          text-xs
+                          font-bold
+                          text-[#17231D]
+                        "
+                      >
+                        Total Quantity
+                      </td>
+
+
+                      <td
+                        className="
+                          px-3
+                          py-2.5
+                          text-center
+                          text-xs
+                          font-bold
+                          tabular-nums
+                          text-[#17231D]
+                        "
+                      >
+                        {totalChallanQty}
+                      </td>
+
+
+                      <td
+                        className="
+                          px-3
+                          py-2.5
+                          text-center
+                          text-xs
+                          font-bold
+                          tabular-nums
+                          text-[#10673E]
+                        "
+                      >
+                        {totalReceivedQty}
+                      </td>
+
+
+                      <td className="px-3 py-2.5" />
+
+                    </tr>
+
+                  </tfoot>
+
+                </table>
+
+              )}
 
             </div>
 
@@ -1553,37 +1935,43 @@ function ProductReceive() {
 
         ) : (
 
-          /* EMPTY STATE — NO CHALLAN LOADED */
+          /* EMPTY STATE */
 
-          <div className="
-            flex
-            flex-1
-            flex-col
-            items-center
-            justify-center
-            px-4
-            text-[#9AA29C]
-          ">
+          <div
+            className="
+              flex
+              flex-1
+              flex-col
+              items-center
+              justify-center
+              px-4
+              text-[#9AA29C]
+            "
+          >
 
             <Boxes
               size={30}
               strokeWidth={1.5}
             />
 
-            <p className="
-              mt-2
-              text-xs
-              font-medium
-            ">
+            <p
+              className="
+                mt-2
+                text-xs
+                font-medium
+              "
+            >
               No challan loaded
             </p>
 
-            <p className="
-              mt-1
-              text-[10px]
-            ">
-              Select a pending challan or enter
-              an order no. and press Load
+            <p
+              className="
+                mt-1
+                text-[10px]
+              "
+            >
+              Select a pending challan or
+              enter an order no. and press Load
             </p>
 
           </div>
@@ -1593,70 +1981,131 @@ function ProductReceive() {
       </section>
 
 
-      {/* ================================================= */}
-      {/* BOTTOM ACTION AREA */}
-      {/* ================================================= */}
+      {/* =========================================================
+          BOTTOM ACTION AREA
+      ========================================================= */}
 
-      <footer className="
-        flex
-        shrink-0
-        flex-wrap
-        items-end
-        justify-between
-        gap-2
-        border-t
-        border-[#DDE5DF]
-        bg-white
-        px-[clamp(8px,1vw,16px)]
-        py-2.5
-      ">
+      <footer
+        className="
+          flex
+          shrink-0
+          flex-wrap
+          items-end
+          justify-between
+          gap-2
+          border-t
+          border-[#DDE5DF]
+          bg-white
+          px-[clamp(8px,1vw,16px)]
+          py-2.5
+        "
+      >
 
-        {/* REMARKS */}
+        <div
+          className="
+            grid
+            min-w-0
+            flex-1
+            grid-cols-1
+            gap-2
+            md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]
+          "
+        >
 
-        <div className="
-          min-w-0
-          flex-1
-        ">
+          {/* RECEIVER REMARKS */}
+            <div className="min-w-0">
 
-          <label className="
-            mb-1
-            flex
-            items-center
-            gap-1
-            text-[10px]
-            font-semibold
-            text-[#66736B]
-          ">
-            Remarks
-          </label>
+            <label
+              className="
+                mb-1
+                flex
+                items-center
+                gap-1
+                text-[10px]
+                font-semibold
+                text-[#66736B]
+              "
+            >
+              Sender Remarks
+            </label>
 
-          <textarea
-            value={remarks}
-            onChange={(e) =>
-              setRemarks(e.target.value)
-            }
-            rows={2}
-            placeholder="Add receiving notes (optional)"
-            className="
-              h-14
-              w-full
-              resize-none
-              rounded-md
-              border
-              border-[#DDE5DF]
-              bg-white
-              px-2.5
-              py-1.5
-              text-xs
-              text-[#17231D]
-              outline-none
-              transition
-              placeholder:text-[#9AA29C]
-              focus:border-[#0E9351]
-              focus:ring-2
-              focus:ring-[#0E9351]/15
-            "
-          />
+            <textarea
+              value={sendRemarks}
+              readOnly
+              rows={2}
+              placeholder="Fetched from API"
+              className="
+                h-14
+                w-full
+                resize-none
+                cursor-not-allowed
+                rounded-md
+                border
+                border-[#E3E7E0]
+                bg-[#F3F4F2]
+                px-2.5
+                py-1.5
+                text-xs
+                text-[#66736B]
+                outline-none
+                transition
+                placeholder:text-[#9AA29C]
+              "
+            />
+
+          </div>
+          <div className="min-w-0">
+
+            <label
+              className="
+                mb-1
+                flex
+                items-center
+                gap-1
+                text-[10px]
+                font-semibold
+                text-[#66736B]
+              "
+            >
+              Receiver Remarks
+            </label>
+
+            <textarea
+              value={remarks}
+              onChange={(e) =>
+                setRemarks(
+                  e.target.value
+                )
+              }
+              rows={2}
+              placeholder="Add receiving notes (optional)"
+              className="
+                h-14
+                w-full
+                resize-none
+                rounded-md
+                border
+                border-[#DDE5DF]
+                bg-white
+                px-2.5
+                py-1.5
+                text-xs
+                text-[#17231D]
+                outline-none
+                transition
+                placeholder:text-[#9AA29C]
+                focus:border-[#0E9351]
+                focus:ring-2
+                focus:ring-[#0E9351]/15
+              "
+            />
+
+          </div>
+
+
+          {/* SENDER REMARKS */}
+
+          
 
         </div>
 
@@ -1666,6 +2115,11 @@ function ProductReceive() {
         <button
           type="button"
           onClick={handleReceive}
+          disabled={
+            isReceiving ||
+            !activeChallan ||
+            items.length === 0
+          }
           className="
             inline-flex
             h-14
@@ -1683,54 +2137,66 @@ function ProductReceive() {
             transition
             hover:bg-[#10673E]
             active:scale-[0.99]
+            disabled:cursor-not-allowed
+            disabled:opacity-50
           "
         >
+
           <PackageCheck size={17} />
-          Receive
+
+          {isReceiving
+            ? "Receiving..."
+            : "Receive"}
+
         </button>
 
       </footer>
 
 
-      {/* ================================================= */}
-      {/* PENDING CHALLAN MODAL */}
-      {/* ================================================= */}
+      {/* =========================================================
+          PENDING CHALLAN MODAL
+      ========================================================= */}
 
       <PendingChallanModal
         open={isModalOpen}
         challans={pendingChallans}
+        loading={isLoadingChallans}
         onClose={() =>
           setIsModalOpen(false)
         }
-        onSelect={handleSelectChallan}
+        onSelect={
+          handleSelectChallan
+        }
       />
 
 
-      {/* ================================================= */}
-      {/* TOAST */}
-      {/* ================================================= */}
+      {/* =========================================================
+          TOAST
+      ========================================================= */}
 
       {toast && (
-        <div className="
-          fixed
-          bottom-8
-          left-1/2
-          z-50
-          flex
-          -translate-x-1/2
-          items-center
-          gap-2
-          rounded-md
-          border
-          border-[#DDE5DF]
-          bg-[#10673E]
-          px-4
-          py-2.5
-          text-xs
-          font-semibold
-          text-white
-          shadow-lg
-        ">
+        <div
+          className="
+            fixed
+            bottom-8
+            left-1/2
+            z-50
+            flex
+            -translate-x-1/2
+            items-center
+            gap-2
+            rounded-md
+            border
+            border-[#DDE5DF]
+            bg-[#10673E]
+            px-4
+            py-2.5
+            text-xs
+            font-semibold
+            text-white
+            shadow-lg
+          "
+        >
 
           {toast.type === "success" ? (
             <CheckCircle2
@@ -1752,5 +2218,6 @@ function ProductReceive() {
     </div>
   );
 }
+
 
 export default ProductReceive;
