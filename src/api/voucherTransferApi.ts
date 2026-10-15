@@ -20,6 +20,7 @@ export interface VoucherTransferResponse {
 export interface VoucherTransferMasterDto {
   referenceNumber: string;
   outToBranchId: number;
+  remarks: string | null;
 }
 
 export interface VoucherTransferDetailDto {

@@ -8,6 +8,7 @@ import React, {
 } from "react";
 
 import { logoutApi, refreshSessionApi } from "../api/authApi";
+import { getPOSCountersByBranch } from "../api/counterApi";
 import {
   setAccessToken as saveAccessToken,
   clearAccessToken,
@@ -33,6 +34,8 @@ export interface AuthUser {
   roleId: number;
   roleName: string;
   branchId: number;
+  /** POS counter bound to this login (sent with sale payloads). */
+  counterId: number;
 }
 
 interface AuthContextType {
@@ -323,6 +326,72 @@ export const AuthProvider: React.FC<{
     // dependency: it only reads refs and initial session values here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * Counter self-heal.
+   *
+   * Sessions saved before the login response carried the POS counter
+   * (already-logged-in browsers, or a backend that returns none) would
+   * post counterId 0 with every sale. When the restored session has no
+   * usable counter, look it up for the branch — unambiguous only when
+   * that branch has exactly one counter.
+   */
+  useEffect(() => {
+    if (isRestoring || !isAuthenticated || !user) {
+      return;
+    }
+
+    if (Number(user.counterId) > 0 || !user.branchId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const result = await getPOSCountersByBranch(user.branchId);
+
+        if (cancelled) return;
+
+        const counters = result?.data ?? [];
+
+        if (counters.length !== 1) {
+          console.error(
+            `[auth] This session has no POS counter and branch ${user.branchId} has ${counters.length} counters — sale posts will send counterId 0. Log out and log in again.`
+          );
+          return;
+        }
+
+        const counterId = counters[0].counterId;
+        console.warn(
+          `[auth] Session had no POS counter — using the only counter of branch ${user.branchId} (counterId ${counterId}).`
+        );
+
+        setUser((previous) => {
+          if (!previous) return previous;
+
+          const next: AuthUser = { ...previous, counterId };
+          const stored = loadSession();
+
+          saveSession({
+            user: next,
+            accessToken: accessToken ?? stored?.accessToken ?? "",
+            expiresAt: expiresAt ?? stored?.expiresAt ?? "",
+            refreshToken: refreshTokenRef.current,
+            refreshTokenExpiresAt: refreshTokenExpiresAtRef.current,
+          });
+
+          return next;
+        });
+      } catch (error) {
+        console.error("[auth] Could not resolve the POS counter:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRestoring, isAuthenticated, user, accessToken, expiresAt]);
 
   /*
    * Auto-refresh / auto-logout timer.

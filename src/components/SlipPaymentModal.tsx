@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, FileText, Plus, Trash2, AlertTriangle, Hash } from "lucide-react";
 import { slipCheck } from "../api/slipCheck";
+import {
+  getTransactionChannelOptionsByChannel,
+  type DropdownOption,
+} from "../api/transactionChannelApi";
+import {
+  PAYMENT_CHANNEL_IDS,
+  type ChannelPaymentEntry,
+} from "../types/payment";
 
 // ======================================================
 // TYPES
@@ -10,12 +18,13 @@ interface SlipPaymentEntry {
   id: number;
   creditSlipAmount: number;
   creditSlipNo: string;
+  channelOptionId: number;
 }
 
 interface SlipPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onSlipTotalChange: (total: number) => void;
+  onSlipEntriesChange: (entries: ChannelPaymentEntry[]) => void;
 }
 
 // ======================================================
@@ -99,7 +108,7 @@ function ConfirmClearModal({
 export default function SlipPaymentModal({
   open,
   onClose,
-  onSlipTotalChange,
+  onSlipEntriesChange,
 }: SlipPaymentModalProps) {
   // ====================================================
   // STATE
@@ -108,9 +117,48 @@ export default function SlipPaymentModal({
   const [entries, setEntries] = useState<SlipPaymentEntry[]>([]);
   const [creditSlipAmount, setCreditSlipAmount] = useState<number>(0);
   const [creditSlipNo, setCreditSlipNo] = useState<string>("");
+  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  /* Slip types come from the transaction-channel-options endpoint. */
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.slip)
+      .then((options) => {
+        if (!cancelled) setChannelOptions(options);
+      })
+      .catch((error) => {
+        console.error("Slip channel options error:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  /* Every field is mandatory before an entry can be added. */
+  const isFormValid =
+    creditSlipAmount > 0 &&
+    creditSlipNo.trim().length > 0 &&
+    channelOptionId > 0;
+
+  /* Parent only needs the amount, the slip no and the channel option. */
+  const toSummaries = (list: SlipPaymentEntry[]): ChannelPaymentEntry[] =>
+    list.map((entry) => ({
+      amount: entry.creditSlipAmount,
+      channelOptionId: entry.channelOptionId,
+      refNo: entry.creditSlipNo,
+    }));
 
   // ====================================================
   // HANDLERS
@@ -118,14 +166,23 @@ export default function SlipPaymentModal({
 
   const handleAddPayment = async () => {
   setValidationError("");
+  setSaveNotice(null);
 
   if (!creditSlipAmount || creditSlipAmount <= 0) {
     setValidationError("Please enter a valid slip amount");
+    setSaveNotice({ type: "error", text: "Please enter a valid slip amount" });
     return;
   }
 
   if (!creditSlipNo || creditSlipNo.trim() === "") {
     setValidationError("Please enter a credit slip number");
+    setSaveNotice({ type: "error", text: "Please enter a credit slip number" });
+    return;
+  }
+
+  if (channelOptionId <= 0) {
+    setValidationError("Please select a Slip Type");
+    setSaveNotice({ type: "error", text: "Please select a Slip Type" });
     return;
   }
 
@@ -137,6 +194,7 @@ export default function SlipPaymentModal({
 
     if (!slip) {
       setValidationError("Invalid or unavailable credit slip");
+      setSaveNotice({ type: "error", text: "Invalid or unavailable credit slip" });
       return;
     }
 
@@ -145,19 +203,25 @@ export default function SlipPaymentModal({
       id: nextId,
       creditSlipAmount,
       creditSlipNo: creditSlipNo.trim(),
+      channelOptionId,
     };
 
     const updatedEntries = [...entries, newEntry];
 
     setEntries(updatedEntries);
+    onSlipEntriesChange(toSummaries(updatedEntries));
     setNextId(nextId + 1);
 
     setCreditSlipAmount(0);
     setCreditSlipNo("");
+    setChannelOptionId(0);
+
+    setSaveNotice({ type: "success", text: "Payment entry added successfully." });
 
   } catch (error) {
     console.error("Slip validation error:", error);
     setValidationError("Unable to verify credit slip");
+    setSaveNotice({ type: "error", text: "Unable to verify credit slip" });
   }
 };
 
@@ -165,9 +229,7 @@ export default function SlipPaymentModal({
     const updatedEntries = entries.filter((e) => e.id !== id);
     setEntries(updatedEntries);
 
-    // Recalculate total
-    const total = updatedEntries.reduce((sum, e) => sum + e.creditSlipAmount, 0);
-    onSlipTotalChange(total);
+    onSlipEntriesChange(toSummaries(updatedEntries));
   };
 
   const handleClearClick = () => {
@@ -175,7 +237,9 @@ export default function SlipPaymentModal({
       // No entries, just reset form
       setCreditSlipAmount(0);
       setCreditSlipNo("");
+      setChannelOptionId(0);
       setValidationError("");
+      setSaveNotice(null);
       return;
     }
     // Show nested confirm modal
@@ -186,11 +250,13 @@ export default function SlipPaymentModal({
     setEntries([]);
     setCreditSlipAmount(0);
     setCreditSlipNo("");
+    setChannelOptionId(0);
     setValidationError("");
+    setSaveNotice(null);
     setShowConfirmClear(false);
 
-    // Update total to 0
-    onSlipTotalChange(0);
+    // Clear the parent totals too
+    onSlipEntriesChange([]);
   };
 
   const handleCancelClear = () => {
@@ -198,8 +264,15 @@ export default function SlipPaymentModal({
   };
 
   const handleSave = () => {
-    const total = entries.reduce((sum, e) => sum + e.creditSlipAmount, 0);
-    onSlipTotalChange(total);
+    if (entries.length === 0) {
+      setSaveNotice({
+        type: "error",
+        text: "Add at least one entry before saving.",
+      });
+      return;
+    }
+
+    onSlipEntriesChange(toSummaries(entries));
     onClose();
   };
 
@@ -305,12 +378,38 @@ export default function SlipPaymentModal({
                 />
               </div>
 
+              {/* Slip Type (channel option) - 4 cols */}
+              <div className="col-span-4">
+                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
+                  <FileText size={14} className="text-[#10673E]" />
+                  Slip Type
+                </label>
+                <select
+                  value={channelOptionId}
+                  onChange={(e) => setChannelOptionId(Number(e.target.value))}
+                  className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-white px-3 text-sm text-[#17231D] outline-none transition-all focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
+                >
+                  <option value={0}>Select Slip Type</option>
+                  {channelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.text}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Add Payment Button - 4 cols, aligned to bottom */}
               <div className="col-span-4 flex items-end">
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  className="h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98]"
+                  disabled={!isFormValid}
+                  title={isFormValid ? undefined : "Fill every field to add"}
+                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                    isFormValid
+                      ? ""
+                      : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"
+                  }`}
                 >
                   <Plus size={16} className="mr-1 inline" />
                   Add Payment
@@ -428,6 +527,18 @@ export default function SlipPaymentModal({
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {saveNotice && (
+                <span
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                    saveNotice.type === "success"
+                      ? "border-[#B7E2C7] bg-[#E8F5ED] text-[#10673E]"
+                      : "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  }`}
+                >
+                  {saveNotice.text}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={handleClearClick}

@@ -42,6 +42,44 @@ export interface CustomerCreateDto {
 export type CustomerUpdateDto = CustomerCreateDto;
 
 /* ------------------------------------------------------------------ */
+/* RegularSales: fetch customer by phone number                        */
+/* ------------------------------------------------------------------ */
+
+/** Customer payload returned by GET /api/RegularSales/customer/{phone} */
+export interface RegularSaleCustomer {
+  customerId: number;
+  customerName: string;
+  mobileNumber: string;
+  emailAddress: string | null;
+  presentAddress: string | null;
+  discount: number | null;
+}
+
+interface RegularSaleCustomerResponse {
+  success: boolean;
+  message: string;
+  data: RegularSaleCustomer | null;
+  pagination: unknown;
+}
+
+/** GET /api/RegularSales/customer/{phone} */
+export const getCustomerByPhone = async (
+  phone: string
+): Promise<RegularSaleCustomer | null> => {
+  const response = await api.get<RegularSaleCustomerResponse>(
+    `RegularSales/customer/${encodeURIComponent(phone)}`
+  );
+
+  console.log("getCustomerByPhone response:", response.data);
+
+  if (!response.data?.success || !response.data.data) {
+    return null;
+  }
+
+  return response.data.data;
+};
+
+/* ------------------------------------------------------------------ */
 /* Dropdown: countries                                                 */
 /* ------------------------------------------------------------------ */
 

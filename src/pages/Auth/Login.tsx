@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { loginApi } from "../../api/authApi";
+import { loginApi, resolveLoginCounterId } from "../../api/authApi";
 import { classifyApiError } from "../../api/apiError";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -30,7 +30,14 @@ const Login = () => {
       console.log("Data:", result.data);
 
       if (result.success && result.data) {
-     
+        const counterId = resolveLoginCounterId(result.data);
+
+        if (!counterId) {
+          console.warn(
+            "[login] The login response carries no POS counter — the till will fall back to the branch's counter (or 0)."
+          );
+        }
+
         const authUser = {
           id: result.data.userId,
           username: result.data.username,
@@ -38,6 +45,7 @@ const Login = () => {
           roleId: result.data.roleId,
           roleName: result.data.roleCode,
           branchId: result.data.branchId,
+          counterId,
         };
 
         login(

@@ -8,7 +8,7 @@ import {
   PackageCheck,
   Search,
   Truck,
-  Warehouse,
+
   X,
 } from "lucide-react";
 
@@ -69,20 +69,20 @@ const smallInputClass = `
   focus:ring-[#0E9351]/15
 `;
 
-const readOnlyInputClass = `
-  h-8
-  w-full
-  cursor-not-allowed
-  rounded-md
-  border
-  border-[#E3E7E0]
-  bg-[#F3F4F2]
-  px-2.5
-  text-xs
-  font-medium
-  text-[#66736B]
-  outline-none
-`;
+// const readOnlyInputClass = `
+//   h-8
+//   w-full
+//   cursor-not-allowed
+//   rounded-md
+//   border
+//   border-[#E3E7E0]
+//   bg-[#F3F4F2]
+//   px-2.5
+//   text-xs
+//   font-medium
+//   text-[#66736B]
+//   outline-none
+// `;
 
 const primaryButtonClass = `
   inline-flex
@@ -543,8 +543,8 @@ function ProductReceive() {
    * Therefore we intentionally do not use a fake/static value
    * such as "Head Office".
    */
-  const [deliveryFrom] =
-    useState("");
+  // const [deliveryFrom] =
+  //   useState("");
 
 
   /* ==============================================================

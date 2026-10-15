@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { X, User, Calendar, Percent, Send, KeyRound, CheckCircle } from "lucide-react";
+import { X, User, Smartphone, Mail, MapPin, Percent, Send, KeyRound, CheckCircle } from "lucide-react";
+import type { RegularSaleCustomer } from "../api/customerApi";
 
 // ======================================================
 // TYPES
@@ -8,6 +9,7 @@ import { X, User, Calendar, Percent, Send, KeyRound, CheckCircle } from "lucide-
 interface CustomerInfoModalProps {
   open: boolean;
   onClose: () => void;
+  customer: RegularSaleCustomer | null;
 }
 
 // ======================================================
@@ -17,6 +19,7 @@ interface CustomerInfoModalProps {
 export default function CustomerInfoModal({
   open,
   onClose,
+  customer,
 }: CustomerInfoModalProps) {
   // ====================================================
   // STATE
@@ -28,12 +31,15 @@ export default function CustomerInfoModal({
   const [toast, setToast] = useState<string>("");
 
   // ====================================================
-  // MOCK DATA (would come from API in real app)
+  // FETCHED CUSTOMER DATA (from /RegularSales/customer/{phone})
   // ====================================================
 
-  const customerName = "John Doe";
-  const dateOfBirth = "1990-05-15";
-  const discount = "10%";
+  const customerName = customer?.customerName ?? "";
+  const mobileNumber = customer?.mobileNumber ?? "";
+  const emailAddress = customer?.emailAddress ?? "";
+  const presentAddress = customer?.presentAddress ?? "";
+  const discount =
+    customer?.discount != null ? `${customer.discount}%` : "-";
 
   // ====================================================
   // HANDLERS
@@ -137,15 +143,45 @@ export default function CustomerInfoModal({
               />
             </div>
 
-            {/* Date of Birth */}
+            {/* Mobile Number */}
             <div>
               <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
-                <Calendar size={14} className="text-[#10673E]" />
-                Date of Birth
+                <Smartphone size={14} className="text-[#10673E]" />
+                Mobile Number
               </label>
               <input
                 type="text"
-                value={dateOfBirth}
+                value={mobileNumber}
+                readOnly
+                className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-[#F3F4F2] px-3 text-sm font-medium text-[#17231D] outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-4">
+            {/* Email Address */}
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
+                <Mail size={14} className="text-[#10673E]" />
+                Email
+              </label>
+              <input
+                type="text"
+                value={emailAddress}
+                readOnly
+                className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-[#F3F4F2] px-3 text-sm font-medium text-[#17231D] outline-none"
+              />
+            </div>
+
+            {/* Present Address */}
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
+                <MapPin size={14} className="text-[#10673E]" />
+                Present Address
+              </label>
+              <input
+                type="text"
+                value={presentAddress}
                 readOnly
                 className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-[#F3F4F2] px-3 text-sm font-medium text-[#17231D] outline-none"
               />

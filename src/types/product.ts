@@ -31,6 +31,23 @@ export interface VoucherCheckResponse {
 
 }
 
+export interface RegularSaleBarcodeProduct {
+  productId: number;
+  barcode: string;
+  shortName: string;
+  fullName: string;
+  quantity: number;
+  salesPrice: number;
+  vatPercent: number;
+}
+
+export interface RegularSaleBarcodeResponse {
+  success: boolean;
+  message: string;
+  data: RegularSaleBarcodeProduct | null;
+  pagination: unknown;
+}
+
 export interface ProductApiResponse {
   success: boolean;
   statusCode: number;

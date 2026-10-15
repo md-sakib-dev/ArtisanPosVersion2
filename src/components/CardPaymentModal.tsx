@@ -1,5 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, CreditCard, Plus, Trash2, Monitor, AlertTriangle } from "lucide-react";
+import {
+  getTransactionChannelOptionsByChannel,
+  type DropdownOption,
+} from "../api/transactionChannelApi";
+import {
+  PAYMENT_CHANNEL_IDS,
+  type ChannelPaymentEntry,
+} from "../types/payment";
 
 // ======================================================
 // TYPES
@@ -11,35 +19,28 @@ interface CardPaymentEntry {
   posMachine: string;
   cardType: string;
   cardNumberLast4: string;
+  channelOptionId: number;
 }
 
 interface CardPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onCardTotalChange: (total: number) => void;
+  onCardEntriesChange: (entries: ChannelPaymentEntry[]) => void;
 }
 
 // ======================================================
 // OPTIONS
 // ======================================================
 
+/*
+ * POS machines are a fixed list. The card *type* (Visa, Mastercard, ...)
+ * comes from the backend instead — see the channel-options effect below.
+ */
 const POS_MACHINES = [
   "Select POS Machine",
-  "POS Machine 01",
-  "POS Machine 02",
-  "POS Machine 03",
-  "POS Machine 04",
-  "POS Machine 05",
-];
-
-const CARD_TYPES = [
-  "Select Card Type",
-  "Visa",
-  "Mastercard",
-  "Amex",
-  "Discover",
-  "JCB",
-  "UnionPay",
+  "POS Machine 1",
+  "POS Machine 2",
+  "POS Machine 3",
 ];
 
 // ======================================================
@@ -184,7 +185,7 @@ function ConfirmClearModal({
 export default function CardPaymentModal({
   open,
   onClose,
-  onCardTotalChange,
+  onCardEntriesChange,
 }: CardPaymentModalProps) {
   // ====================================================
   // STATE
@@ -192,12 +193,54 @@ export default function CardPaymentModal({
 
   const [entries, setEntries] = useState<CardPaymentEntry[]>([]);
   const [cardPayment, setCardPayment] = useState<number>(0);
+  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [posMachine, setPosMachine] = useState<string>(POS_MACHINES[0]);
-  const [cardType, setCardType] = useState<string>(CARD_TYPES[0]);
   const [cardNumberLast4, setCardNumberLast4] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  /* Card types come from the transaction-channel-options endpoint. */
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.card)
+      .then((options) => {
+        if (!cancelled) setChannelOptions(options);
+      })
+      .catch((error) => {
+        console.error("Card channel options error:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const selectedChannel = channelOptions.find(
+    (option) => Number(option.value) === channelOptionId,
+  );
+
+  /* Every field is mandatory before an entry can be added. */
+  const isFormValid =
+    cardPayment > 0 &&
+    posMachine !== POS_MACHINES[0] &&
+    channelOptionId > 0 &&
+    cardNumberLast4.length === 4;
+
+  /* Parent only needs the amount + the chosen channel option. */
+  const toSummaries = (list: CardPaymentEntry[]): ChannelPaymentEntry[] =>
+    list.map((entry) => ({
+      amount: entry.cardPayment,
+      channelOptionId: entry.channelOptionId,
+    }));
 
   // ====================================================
   // HANDLERS
@@ -205,24 +248,32 @@ export default function CardPaymentModal({
 
   const handleAddPayment = () => {
     setValidationError("");
+    setSaveNotice(null);
 
     if (!cardPayment || cardPayment <= 0) {
       setValidationError("Please enter a valid payment amount");
+      setSaveNotice({ type: "error", text: "Please enter a valid payment amount" });
       return;
     }
 
     if (posMachine === POS_MACHINES[0]) {
       setValidationError("Please select a POS Machine");
+      setSaveNotice({ type: "error", text: "Please select a POS Machine" });
       return;
     }
 
-    if (cardType === CARD_TYPES[0]) {
+    if (channelOptionId <= 0) {
       setValidationError("Please select a Card Type");
+      setSaveNotice({ type: "error", text: "Please select a Card Type" });
       return;
     }
 
     if (!cardNumberLast4 || cardNumberLast4.length !== 4) {
       setValidationError("Please enter last 4 digits of card number");
+      setSaveNotice({
+        type: "error",
+        text: "Please enter last 4 digits of card number",
+      });
       return;
     }
 
@@ -230,37 +281,41 @@ export default function CardPaymentModal({
       id: nextId,
       cardPayment,
       posMachine,
-      cardType,
+      /* The selected channel option is the card type. */
+      cardType: selectedChannel?.text ?? "",
       cardNumberLast4,
+      channelOptionId,
     };
 
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
+    onCardEntriesChange(toSummaries(updatedEntries));
     setNextId(nextId + 1);
 
     setCardPayment(0);
+    setChannelOptionId(0);
     setPosMachine(POS_MACHINES[0]);
-    setCardType(CARD_TYPES[0]);
     setCardNumberLast4("");
+
+    setSaveNotice({ type: "success", text: "Payment entry added successfully." });
   };
 
   const handleDeleteEntry = (id: number) => {
     const updatedEntries = entries.filter((e) => e.id !== id);
     setEntries(updatedEntries);
 
-    // Recalculate total
-    const total = updatedEntries.reduce((sum, e) => sum + e.cardPayment, 0);
-    onCardTotalChange(total);
+    onCardEntriesChange(toSummaries(updatedEntries));
   };
 
   const handleClearClick = () => {
     if (entries.length === 0) {
       // No entries, just reset form
       setCardPayment(0);
+      setChannelOptionId(0);
       setPosMachine(POS_MACHINES[0]);
-      setCardType(CARD_TYPES[0]);
       setCardNumberLast4("");
       setValidationError("");
+      setSaveNotice(null);
       return;
     }
     // Show nested confirm modal
@@ -270,14 +325,15 @@ export default function CardPaymentModal({
   const handleConfirmClear = () => {
     setEntries([]);
     setCardPayment(0);
+    setChannelOptionId(0);
     setPosMachine(POS_MACHINES[0]);
-    setCardType(CARD_TYPES[0]);
     setCardNumberLast4("");
     setValidationError("");
+    setSaveNotice(null);
     setShowConfirmClear(false);
 
-    // Update total to 0
-    onCardTotalChange(0);
+    // Clear the parent totals too
+    onCardEntriesChange([]);
   };
 
   const handleCancelClear = () => {
@@ -285,8 +341,15 @@ export default function CardPaymentModal({
   };
 
   const handleSave = () => {
-    const total = entries.reduce((sum, e) => sum + e.cardPayment, 0);
-    onCardTotalChange(total);
+    if (entries.length === 0) {
+      setSaveNotice({
+        type: "error",
+        text: "Add at least one entry before saving.",
+      });
+      return;
+    }
+
+    onCardEntriesChange(toSummaries(entries));
     onClose();
   };
 
@@ -408,13 +471,14 @@ export default function CardPaymentModal({
                   Card Type
                 </label>
                 <select
-                  value={cardType}
-                  onChange={(e) => setCardType(e.target.value)}
+                  value={channelOptionId}
+                  onChange={(e) => setChannelOptionId(Number(e.target.value))}
                   className={selectClass}
                 >
-                  {CARD_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                  <option value={0}>Select Card Type</option>
+                  {channelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.text}
                     </option>
                   ))}
                 </select>
@@ -441,7 +505,13 @@ export default function CardPaymentModal({
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  className="h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98]"
+                  disabled={!isFormValid}
+                  title={isFormValid ? undefined : "Fill every field to add"}
+                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                    isFormValid
+                      ? ""
+                      : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"
+                  }`}
                 >
                   <Plus size={16} className="mr-1 inline" />
                   Add Payment
@@ -567,6 +637,18 @@ export default function CardPaymentModal({
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {saveNotice && (
+                <span
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                    saveNotice.type === "success"
+                      ? "border-[#B7E2C7] bg-[#E8F5ED] text-[#10673E]"
+                      : "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  }`}
+                >
+                  {saveNotice.text}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={handleClearClick}

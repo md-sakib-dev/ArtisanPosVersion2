@@ -1,5 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Smartphone, Plus, Trash2, AlertTriangle, Hash } from "lucide-react";
+import {
+  getTransactionChannelOptionsByChannel,
+  type DropdownOption,
+} from "../api/transactionChannelApi";
+import {
+  PAYMENT_CHANNEL_IDS,
+  type ChannelPaymentEntry,
+} from "../types/payment";
 
 // ======================================================
 // TYPES
@@ -10,25 +18,18 @@ interface MfsPaymentEntry {
   paymentAmount: number;
   mobileNoLast4: string;
   mobilePaymentType: string;
+  channelOptionId: number;
 }
 
 interface MfsPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onMfsTotalChange: (total: number) => void;
+  onMfsEntriesChange: (entries: ChannelPaymentEntry[]) => void;
 }
 
 // ======================================================
 // OPTIONS
 // ======================================================
-
-const MOBILE_PAYMENT_TYPES = [
-  "Select Payment Type",
-  "bKash",
-  "Nagad",
-  "UPAY",
-  "ROCKET",
-];
 
 // ======================================================
 // STYLES
@@ -115,7 +116,7 @@ function ConfirmClearModal({
 export default function MfsPaymentModal({
   open,
   onClose,
-  onMfsTotalChange,
+  onMfsEntriesChange,
 }: MfsPaymentModalProps) {
   // ====================================================
   // STATE
@@ -124,10 +125,51 @@ export default function MfsPaymentModal({
   const [entries, setEntries] = useState<MfsPaymentEntry[]>([]);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [mobileNoLast4, setMobileNoLast4] = useState<string>("");
-  const [mobilePaymentType, setMobilePaymentType] = useState<string>(MOBILE_PAYMENT_TYPES[0]);
+  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  /* MFS providers come from the transaction-channel-options endpoint. */
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.mfs)
+      .then((options) => {
+        if (!cancelled) setChannelOptions(options);
+      })
+      .catch((error) => {
+        console.error("MFS channel options error:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const selectedChannel = channelOptions.find(
+    (option) => Number(option.value) === channelOptionId,
+  );
+
+  /* Every field is mandatory before an entry can be added. */
+  const isFormValid =
+    paymentAmount > 0 &&
+    mobileNoLast4.length === 4 &&
+    channelOptionId > 0;
+
+  /* Parent only needs the amount + the chosen channel option. */
+  const toSummaries = (list: MfsPaymentEntry[]): ChannelPaymentEntry[] =>
+    list.map((entry) => ({
+      amount: entry.paymentAmount,
+      channelOptionId: entry.channelOptionId,
+    }));
 
   // ====================================================
   // HANDLERS
@@ -135,19 +177,29 @@ export default function MfsPaymentModal({
 
   const handleAddPayment = () => {
     setValidationError("");
+    setSaveNotice(null);
 
     if (!paymentAmount || paymentAmount <= 0) {
       setValidationError("Please enter a valid payment amount");
+      setSaveNotice({ type: "error", text: "Please enter a valid payment amount" });
       return;
     }
 
     if (!mobileNoLast4 || mobileNoLast4.length !== 4) {
       setValidationError("Please enter last 4 digits of mobile number");
+      setSaveNotice({
+        type: "error",
+        text: "Please enter last 4 digits of mobile number",
+      });
       return;
     }
 
-    if (mobilePaymentType === MOBILE_PAYMENT_TYPES[0]) {
+    if (channelOptionId <= 0) {
       setValidationError("Please select a Mobile Payment Type");
+      setSaveNotice({
+        type: "error",
+        text: "Please select a Mobile Payment Type",
+      });
       return;
     }
 
@@ -155,25 +207,27 @@ export default function MfsPaymentModal({
       id: nextId,
       paymentAmount,
       mobileNoLast4,
-      mobilePaymentType,
+      mobilePaymentType: selectedChannel?.text ?? "",
+      channelOptionId,
     };
 
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
+    onMfsEntriesChange(toSummaries(updatedEntries));
     setNextId(nextId + 1);
 
     setPaymentAmount(0);
     setMobileNoLast4("");
-    setMobilePaymentType(MOBILE_PAYMENT_TYPES[0]);
+    setChannelOptionId(0);
+
+    setSaveNotice({ type: "success", text: "Payment entry added successfully." });
   };
 
   const handleDeleteEntry = (id: number) => {
     const updatedEntries = entries.filter((e) => e.id !== id);
     setEntries(updatedEntries);
 
-    // Recalculate total
-    const total = updatedEntries.reduce((sum, e) => sum + e.paymentAmount, 0);
-    onMfsTotalChange(total);
+    onMfsEntriesChange(toSummaries(updatedEntries));
   };
 
   const handleClearClick = () => {
@@ -181,8 +235,9 @@ export default function MfsPaymentModal({
       // No entries, just reset form
       setPaymentAmount(0);
       setMobileNoLast4("");
-      setMobilePaymentType(MOBILE_PAYMENT_TYPES[0]);
+      setChannelOptionId(0);
       setValidationError("");
+      setSaveNotice(null);
       return;
     }
     // Show nested confirm modal
@@ -193,12 +248,13 @@ export default function MfsPaymentModal({
     setEntries([]);
     setPaymentAmount(0);
     setMobileNoLast4("");
-    setMobilePaymentType(MOBILE_PAYMENT_TYPES[0]);
+    setChannelOptionId(0);
     setValidationError("");
+    setSaveNotice(null);
     setShowConfirmClear(false);
 
-    // Update total to 0
-    onMfsTotalChange(0);
+    // Clear the parent totals too
+    onMfsEntriesChange([]);
   };
 
   const handleCancelClear = () => {
@@ -206,8 +262,15 @@ export default function MfsPaymentModal({
   };
 
   const handleSave = () => {
-    const total = entries.reduce((sum, e) => sum + e.paymentAmount, 0);
-    onMfsTotalChange(total);
+    if (entries.length === 0) {
+      setSaveNotice({
+        type: "error",
+        text: "Add at least one entry before saving.",
+      });
+      return;
+    }
+
+    onMfsEntriesChange(toSummaries(entries));
     onClose();
   };
 
@@ -326,13 +389,14 @@ export default function MfsPaymentModal({
                   Mobile Payment Type
                 </label>
                 <select
-                  value={mobilePaymentType}
-                  onChange={(e) => setMobilePaymentType(e.target.value)}
+                  value={channelOptionId}
+                  onChange={(e) => setChannelOptionId(Number(e.target.value))}
                   className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-white px-3 text-sm text-[#17231D] outline-none transition-all focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
                 >
-                  {MOBILE_PAYMENT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                  <option value={0}>Select Payment Type</option>
+                  {channelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.text}
                     </option>
                   ))}
                 </select>
@@ -343,7 +407,13 @@ export default function MfsPaymentModal({
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  className="h-10 w-full rounded-lg bg-[#10673E] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98]"
+                  disabled={!isFormValid}
+                  title={isFormValid ? undefined : "Fill every field to add"}
+                  className={`h-10 w-full rounded-lg bg-[#10673E] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] ${
+                    isFormValid
+                      ? ""
+                      : "cursor-not-allowed opacity-50 hover:bg-[#10673E]"
+                  }`}
                 >
                   <Plus size={16} className="mr-1 inline" />
                   Add Payment
@@ -469,6 +539,18 @@ export default function MfsPaymentModal({
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {saveNotice && (
+                <span
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                    saveNotice.type === "success"
+                      ? "border-[#B7E2C7] bg-[#E8F5ED] text-[#10673E]"
+                      : "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  }`}
+                >
+                  {saveNotice.text}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={handleClearClick}

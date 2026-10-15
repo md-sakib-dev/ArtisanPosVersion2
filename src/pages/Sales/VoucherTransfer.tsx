@@ -77,19 +77,19 @@ const smallInputClass = `
   focus:ring-[#0E9351]/15
 `;
 
-const readOnlyInputClass = `
-  h-8
-  w-full
-  rounded-md
-  border
-  border-[#E3E7E0]
-  bg-[#F6F8F5]
-  px-2.5
-  text-xs
-  font-medium
-  text-[#66736B]
-  outline-none
-`;
+// const readOnlyInputClass = `
+//   h-8
+//   w-full
+//   rounded-md
+//   border
+//   border-[#E3E7E0]
+//   bg-[#F6F8F5]
+//   px-2.5
+//   text-xs
+//   font-medium
+//   text-[#66736B]
+//   outline-none
+// `;
 
 const secondaryButtonClass = `
   inline-flex
@@ -1227,17 +1227,17 @@ function VoucherTransfer() {
         only one reference number.
       */
 
-      if (
-        referenceNumbers.length !== 1
-      ) {
+      // if (
+      //   referenceNumbers.length !== 1
+      // ) {
 
-        showToast(
-          "Selected vouchers belong to different reference numbers",
-          "error"
-        );
+      //   showToast(
+      //     "Selected vouchers belong to different reference numbers",
+      //     "error"
+      //   );
 
-        return;
-      }
+      //   return;
+      // }
 
 
       // -----------------------------------------------
@@ -1253,7 +1253,7 @@ function VoucherTransfer() {
 
           outToBranchId:
             Number(transferTo),
-
+           remarks: remarks || null,
         },
 
         details:

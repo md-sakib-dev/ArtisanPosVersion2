@@ -14,20 +14,31 @@ import {
   Ban,
 } from "lucide-react";
 import {
-  getPendingReturnRequests,
-  approveReturnRequest,
-  discardReturnRequest,
-  type PendingReturnRequest,
+  getPendingProductReturns,
+  getProductReturnDetails,
+  updateProductReturnStatus,
+  type ProductReturnMaster,
+  type ProductReturnDetail,
 } from "../../api/productReturnApi";
 
 /* ------------------------------------------------------------------ */
-/* Helpers — same business rules as ProductReturnRequest.tsx           */
+/* Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Round to 2 decimals to avoid floating-point drift in totals. */
-const r2 = (n: number) => Math.round(n * 100) / 100;
+const money = (n: number) =>
+  (n ?? 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const formatBDT = (n: number) =>
+  `৳${(n ?? 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const formatDateTime = (iso: string) => {
+  if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return `${d.toLocaleDateString("en-GB", {
@@ -45,54 +56,6 @@ const getErrMessage = (err: unknown, fallback: string): string => {
   const anyErr = err as { response?: { data?: { message?: string } } };
   return anyErr?.response?.data?.message || fallback;
 };
-
-const money = (n: number) =>
-  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/** ৳1,234.56 — en-IN grouping with 2 decimals, same as ProductReturnRequest. */
-const formatBDT = (n: number) =>
-  `৳${n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
-/* ------------------------------------------------------------------ */
-/* Calculation summary — SalesRefund/ProductReturn VAT logic           */
-/* ------------------------------------------------------------------ */
-
-interface ReturnCalcSummary {
-  totalPrice: number;
-  totalDiscount: number;
-  priceAfterDiscount: number;
-  vatAmount: number;
-  priceIncludingVat: number;
-}
-
-/**
- * Same proportional VAT rules used by the Product Return Request page:
- * VAT % per product applied to each item's share after discount.
- */
-function calcReturnSummary(items: PendingReturnRequest["items"]): ReturnCalcSummary {
-  const totalPrice = r2(items.reduce((s, it) => s + it.totalPrice, 0));
-  const totalDiscount = r2(items.reduce((s, it) => s + it.discount, 0));
-  const priceAfterDiscount = r2(totalPrice - totalDiscount);
-
-  const vatAmount = r2(
-    items.reduce((sum, it) => {
-      const itemShare = totalPrice > 0 ? it.totalPrice / totalPrice : 0;
-      const itemAfterDiscount = it.totalPrice - totalDiscount * itemShare;
-      return sum + (itemAfterDiscount * it.vat) / 100;
-    }, 0)
-  );
-
-  return {
-    totalPrice,
-    totalDiscount,
-    priceAfterDiscount,
-    vatAmount,
-    priceIncludingVat: r2(priceAfterDiscount + vatAmount),
-  };
-}
 
 // ======================================================
 // TOAST
@@ -131,7 +94,7 @@ function Toast({
 }
 
 /* ------------------------------------------------------------------ */
-/* Confirm dialog — native <dialog>, app modal style                    */
+/* Confirm dialog                                                     */
 /* ------------------------------------------------------------------ */
 
 function ConfirmDialog({
@@ -190,8 +153,8 @@ function ConfirmDialog({
             </h2>
             <p className="mt-1 text-[12.5px] text-[#6B7280]">
               {isApprove
-                ? `Request ${requestNumber} will be approved and the return processed.`
-                : `Request ${requestNumber} will be rejected and removed from the pending list.`}
+                ? `Request ${requestNumber} will be approved and processed.`
+                : `Request ${requestNumber} will be discarded and removed.`}
             </p>
           </div>
         </div>
@@ -235,156 +198,104 @@ function ConfirmDialog({
 // ======================================================
 
 export default function ProductReturnApproval() {
-  // --------------------------------------------------
-  // PENDING REQUESTS
-  // --------------------------------------------------
-  const [requests, setRequests] = useState<PendingReturnRequest[]>([]);
+  const [requests, setRequests] = useState<ProductReturnMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --------------------------------------------------
-  // SELECTED REQUEST
-  // --------------------------------------------------
-  const [selected, setSelected] = useState<PendingReturnRequest | null>(null);
-  const [loadingRequest, setLoadingRequest] = useState<number | null>(null);
+  // Selected master & fetched details
+  const [selectedMaster, setSelectedMaster] = useState<ProductReturnMaster | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<ProductReturnDetail[]>([]);
+  const [loadingRequestId, setLoadingRequestId] = useState<number | null>(null);
 
-  // --------------------------------------------------
-  // ACTIONS
-  // --------------------------------------------------
+  // Actions
   const [confirmMode, setConfirmMode] = useState<"approve" | "discard" | null>(null);
   const [acting, setActing] = useState(false);
 
-  // --------------------------------------------------
-  // TOAST
-  // --------------------------------------------------
+  // Toast
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
 
-  // --------------------------------------------------
-  // DATA LOADING
-  // --------------------------------------------------
-  const fetchRequests = (): Promise<void> => {
+  const fetchRequests = async () => {
     setLoading(true);
-    return getPendingReturnRequests()
-      .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setRequests(res.data);
-          setLoadError(null);
-        } else {
-          throw new Error(res.message || "Failed to load pending requests");
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load pending return requests:", err);
-        setLoadError(
-          getErrMessage(err, "Failed to load pending return requests. Please try again.")
-        );
-      })
-      .finally(() => setLoading(false));
+    try {
+      const data = await getPendingProductReturns();
+      setRequests(data);
+      setLoadError(null);
+    } catch (err) {
+      console.error("Failed to load pending returns:", err);
+      setLoadError(getErrMessage(err, "Failed to load pending return requests."));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  /* Initial load — state updates happen inside promise callbacks. */
   useEffect(() => {
-    let cancelled = false;
-
-    getPendingReturnRequests()
-      .then((res) => {
-        if (cancelled) return;
-        if (res.success && Array.isArray(res.data)) {
-          setRequests(res.data);
-          setLoadError(null);
-        } else {
-          throw new Error(res.message || "Failed to load pending requests");
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("Failed to load pending return requests:", err);
-        setLoadError(
-          getErrMessage(err, "Failed to load pending return requests. Please try again.")
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    fetchRequests();
   }, []);
 
-  /* Drop the selected request from the local list after approve/discard. */
-  const removeRequest = (id: number) => {
-    setRequests((prev) => prev.filter((r) => r.returnRequestId !== id));
-  };
-
-  // --------------------------------------------------
-  // DERIVED
-  // --------------------------------------------------
   const filteredRequests = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return requests;
     return requests.filter(
       (r) =>
-        r.requestNumber.toLowerCase().includes(term) ||
-        r.customerContact.includes(term) ||
-        r.requestBy.toLowerCase().includes(term)
+        r.returnRequestNo.toLowerCase().includes(term) ||
+        r.customerContactNumber.includes(term) ||
+        r.requestType.toLowerCase().includes(term)
     );
   }, [requests, searchTerm]);
 
-  /* Loaded request summary — recalculated with the page's own business rules. */
-  const summary = useMemo(
-    () => (selected ? calcReturnSummary(selected.items) : null),
-    [selected]
-  );
-
-  // --------------------------------------------------
-  // HANDLERS
-  // --------------------------------------------------
-  const handleLoad = (request: PendingReturnRequest) => {
-    setLoadingRequest(request.returnRequestId);
-    // The grid already holds the full request — brief delay keeps the
-    // Load affordance visible, then populate the detail section.
-    setTimeout(() => {
-      setSelected(request);
-      setLoadingRequest(null);
-    }, 350);
+  // Handle Load click: fetches /api/ProductReturns/{returnId}
+  const handleLoad = async (req: ProductReturnMaster) => {
+    setLoadingRequestId(req.returnId);
+    try {
+      const res = await getProductReturnDetails(req.returnId);
+      setSelectedMaster(res.master);
+      setSelectedDetails(res.details || []);
+    } catch (err) {
+      setToast({
+        message: getErrMessage(err, "Failed to load return item details."),
+        type: "error",
+      });
+    } finally {
+      setLoadingRequestId(null);
+    }
   };
 
   const clearSelection = () => {
-    setSelected(null);
+    setSelectedMaster(null);
+    setSelectedDetails([]);
     setConfirmMode(null);
   };
 
   const handleConfirmAction = async () => {
-    if (!selected || acting) return;
+    if (!selectedMaster || acting) return;
 
     const mode = confirmMode;
+    // 1 for approve, 2 for discard
+    const statusParam = mode === "approve" ? 1 : 2;
+
     setActing(true);
     try {
-      const res =
-        mode === "approve"
-          ? await approveReturnRequest(selected.returnRequestId)
-          : await discardReturnRequest(selected.returnRequestId);
+      const res = await updateProductReturnStatus(selectedMaster.returnId, statusParam);
       if (res.success === false) throw new Error(res.message || "Action failed");
 
       setToast({
         message:
           mode === "approve"
-            ? `Return request ${selected.requestNumber} approved successfully`
-            : `Return request ${selected.requestNumber} discarded`,
+            ? `Return request ${selectedMaster.returnRequestNo} approved successfully`
+            : `Return request ${selectedMaster.returnRequestNo} discarded`,
         type: "success",
       });
-      removeRequest(selected.returnRequestId);
+
+      setRequests((prev) => prev.filter((r) => r.returnId !== selectedMaster.returnId));
       clearSelection();
       await fetchRequests();
     } catch (err) {
-      console.error("Failed to process return request:", err);
       setToast({
-        message: getErrMessage(err, "Failed to process the return request. Please try again."),
+        message: getErrMessage(err, "Failed to process the return request."),
         type: "error",
       });
       setConfirmMode(null);
@@ -393,9 +304,6 @@ export default function ProductReturnApproval() {
     }
   };
 
-  // --------------------------------------------------
-  // RENDER
-  // --------------------------------------------------
   return (
     <div className="h-full overflow-y-auto bg-[#F5F7F3]">
       <div
@@ -423,9 +331,7 @@ export default function ProductReturnApproval() {
           </div>
         </header>
 
-        {/* ====================================================== */}
-        {/* PENDING RETURN REQUESTS GRID                             */}
-        {/* ====================================================== */}
+        {/* PENDING LIST GRID */}
         <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
             <div className="flex items-center gap-2">
@@ -451,7 +357,6 @@ export default function ProductReturnApproval() {
             </div>
           </div>
 
-          {/* Load error banner */}
           {loadError && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#FEE2E2] bg-red-50 px-5 py-3">
               <div className="flex items-center gap-2 text-[12.5px] font-medium text-red-600">
@@ -473,23 +378,18 @@ export default function ProductReturnApproval() {
               <thead>
                 <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
                   <th className="px-5 py-3 font-semibold text-[#6B7280]">SL</th>
-                  <th className="px-5 py-3 font-semibold text-[#6B7280]">
-                    Request Number
-                  </th>
-                  <th className="px-5 py-3 font-semibold text-[#6B7280]">
-                    Contact Number
-                  </th>
-                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Request By</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Request No</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Type</th>
+                  <th className="px-5 py-3 font-semibold text-[#6B7280]">Contact Number</th>
+                  <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Gross Value</th>
                   <th className="px-5 py-3 font-semibold text-[#6B7280]">Request At</th>
-                  <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                    Action
-                  </th>
+                  <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-16 text-center">
+                    <td colSpan={7} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-[#94A3B8]">
                         <Loader2 size={28} className="animate-spin text-[#10673E]" />
                         <p className="mt-2 text-[13px] font-medium">
@@ -500,18 +400,11 @@ export default function ProductReturnApproval() {
                   </tr>
                 ) : filteredRequests.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-16 text-center">
+                    <td colSpan={7} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center justify-center text-[#94A3B8]">
                         <RotateCcw size={30} strokeWidth={1.5} />
                         <p className="mt-2 text-[13px] font-medium">
                           No pending return requests
-                        </p>
-                        <p className="mt-1 text-[12px]">
-                          {searchTerm || loadError
-                            ? searchTerm
-                              ? "Try a different search term"
-                              : "Fix the connection and retry"
-                            : "All caught up — nothing to approve"}
                         </p>
                       </div>
                     </td>
@@ -519,31 +412,32 @@ export default function ProductReturnApproval() {
                 ) : (
                   filteredRequests.map((req, index) => (
                     <tr
-                      key={req.returnRequestId}
+                      key={req.returnId}
                       className={`border-b border-[#F1F5F9] transition-colors hover:bg-[#F8FAFC] ${
-                        selected?.returnRequestId === req.returnRequestId
-                          ? "bg-[#E8F5ED]/50"
-                          : ""
+                        selectedMaster?.returnId === req.returnId ? "bg-[#E8F5ED]/50" : ""
                       }`}
                     >
                       <td className="px-5 py-3 text-[#94A3B8]">{index + 1}</td>
                       <td className="px-5 py-3 font-semibold text-[#10673E] tabular-nums">
-                        {req.requestNumber}
+                        {req.returnRequestNo}
                       </td>
+                      <td className="px-5 py-3 text-[#374151]">{req.requestType}</td>
                       <td className="px-5 py-3 tabular-nums text-[#374151]">
-                        {req.customerContact}
+                        {req.customerContactNumber}
                       </td>
-                      <td className="px-5 py-3 text-[#374151]">{req.requestBy}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-[#1F2937]">
+                        {formatBDT(req.grossValue)}
+                      </td>
                       <td className="px-5 py-3 text-[#6B7280] tabular-nums">
-                        {formatDateTime(req.requestAt)}
+                        {formatDateTime(req.createdAt)}
                       </td>
                       <td className="px-5 py-3 text-right">
                         <button
                           onClick={() => handleLoad(req)}
-                          disabled={loadingRequest !== null}
+                          disabled={loadingRequestId !== null}
                           className="rounded-lg bg-[#10673E] px-4 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {loadingRequest === req.returnRequestId ? (
+                          {loadingRequestId === req.returnId ? (
                             <span className="flex items-center gap-1.5">
                               <Loader2 size={12} className="animate-spin" />
                               Loading
@@ -561,22 +455,20 @@ export default function ProductReturnApproval() {
           </div>
         </div>
 
-        {/* ====================================================== */}
-        {/* SELECTED REQUEST / APPROVAL SECTION                      */}
-        {/* ====================================================== */}
-        {!selected ? (
+        {/* SELECTED REQUEST DETAILS & CALCULATION SUMMARY */}
+        {!selectedMaster ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#D1D5DB] bg-white/60 px-6 py-12 text-center">
             <FileText size={30} strokeWidth={1.5} className="text-[#94A3B8]" />
             <p className="mt-2 text-[13px] font-medium text-[#6B7280]">
               Select a pending return request to review.
             </p>
             <p className="mt-1 text-[12px] text-[#94A3B8]">
-              Click Load on a request above to populate this section.
+              Click Load on a request above to fetch its master and item details.
             </p>
           </div>
         ) : (
           <div className="space-y-5">
-            {/* REQUEST INFORMATION (read-only) */}
+            {/* REQUEST MASTER INFO */}
             <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
                 <div className="flex items-center gap-2">
@@ -599,10 +491,10 @@ export default function ProductReturnApproval() {
 
               <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "Request Number", value: selected.requestNumber },
-                  { label: "Contact Number", value: selected.customerContact },
-                  { label: "Request By", value: selected.requestBy },
-                  { label: "Request At", value: formatDateTime(selected.requestAt) },
+                  { label: "Request No", value: selectedMaster.returnRequestNo },
+                  { label: "Request Type", value: selectedMaster.requestType },
+                  { label: "Contact Number", value: selectedMaster.customerContactNumber },
+                  { label: "Request At", value: formatDateTime(selectedMaster.createdAt) },
                 ].map((f) => (
                   <div key={f.label}>
                     <label className="mb-1.5 block text-[13px] font-semibold text-[#374151]">
@@ -616,7 +508,7 @@ export default function ProductReturnApproval() {
               </div>
             </div>
 
-            {/* PRODUCT RETURN DETAILS */}
+            {/* PRODUCT RETURN DETAILS TABLE */}
             <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
               <div className="flex items-center gap-2 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E]">
@@ -626,7 +518,7 @@ export default function ProductReturnApproval() {
                   Product Return Details
                 </h2>
                 <span className="rounded-md bg-[#10673E]/10 px-2.5 py-1 text-[11px] font-semibold text-[#10673E]">
-                  {selected.items.length} items
+                  {selectedDetails.length} items
                 </span>
               </div>
 
@@ -635,64 +527,40 @@ export default function ProductReturnApproval() {
                   <thead>
                     <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
                       <th className="px-5 py-3 font-semibold text-[#6B7280]">SL</th>
-                      <th className="px-5 py-3 font-semibold text-[#6B7280]">Product</th>
                       <th className="px-5 py-3 font-semibold text-[#6B7280]">Barcode</th>
-                      <th className="px-5 py-3 font-semibold text-[#6B7280]">Invoice</th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        Qty
-                      </th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        Unit Price
-                      </th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        Discount
-                      </th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        VAT %
-                      </th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        Amount
-                      </th>
-                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">
-                        Net Amount
-                      </th>
+                      <th className="px-5 py-3 font-semibold text-[#6B7280]">Invoice No</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Qty</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Unit Price</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Disc %</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">VAT %</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Total</th>
+                      <th className="px-5 py-3 text-right font-semibold text-[#6B7280]">Net Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selected.items.map((item, index) => (
+                    {selectedDetails.map((item, index) => (
                       <tr
-                        key={`${item.barcode}-${item.invoiceNumber}-${index}`}
+                        key={item.detailId || index}
                         className="border-b border-[#F1F5F9] transition-colors hover:bg-[#F8FAFC]"
                       >
                         <td className="px-5 py-3 text-[#94A3B8]">{index + 1}</td>
-                        <td className="px-5 py-3 font-medium text-[#1F2937]">
-                          {item.productName}
-                        </td>
-                        <td className="px-5 py-3">
-                          <code className="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[12px] font-medium text-[#475569]">
-                            {item.barcode}
-                          </code>
-                        </td>
-                        <td className="px-5 py-3 tabular-nums text-[#374151]">
-                          {item.invoiceNumber}
-                        </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-[#374151]">
-                          {item.qty}
-                        </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-[#374151]">
+                        <td className="px-5 py-3 font-mono text-[#334155]">{item.barcode}</td>
+                        <td className="px-5 py-3 text-[#334155]">{item.invoiceNo}</td>
+                        <td className="px-5 py-3 text-right tabular-nums text-[#334151]">{item.qty}</td>
+                        <td className="px-5 py-3 text-right tabular-nums text-[#334151]">
                           {money(item.unitPrice)}
                         </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-[#374151]">
-                          {money(item.discount)}
+                        <td className="px-5 py-3 text-right tabular-nums text-[#334151]">
+                          {item.discountPercent}%
                         </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-[#374151]">
-                          {item.vat}%
+                        <td className="px-5 py-3 text-right tabular-nums text-[#334151]">
+                          {item.vatPercent}%
                         </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-[#374151]">
+                        <td className="px-5 py-3 text-right tabular-nums text-[#334151]">
                           {money(item.totalPrice)}
                         </td>
                         <td className="px-5 py-3 text-right font-semibold tabular-nums text-[#1F2937]">
-                          {money(item.netPrice)}
+                          {money(item.totalPriceAfterDiscount)}
                         </td>
                       </tr>
                     ))}
@@ -701,7 +569,7 @@ export default function ProductReturnApproval() {
               </div>
             </div>
 
-            {/* CALCULATION SUMMARY + ACTIONS */}
+            {/* CALCULATION SUMMARY & APPROVE / DISCARD BUTTONS */}
             <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
               <div className="flex items-center gap-2 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#10673E]/10 text-[#10673E]">
@@ -712,34 +580,31 @@ export default function ProductReturnApproval() {
                 </h2>
               </div>
 
-              {/* Calculation fields — flex mode, identical to the
-                  Product Return Request page. */}
               <div className="flex flex-wrap items-stretch gap-3 p-5">
                 <CalcTile
-                  label="Total Price"
-                  value={formatBDT(summary!.totalPrice)}
+                  label="Product Price"
+                  value={formatBDT(selectedMaster.productPrice)}
                 />
                 <CalcTile
-                  label="Discount"
-                  value={formatBDT(summary!.totalDiscount)}
+                  label="Discount Amount"
+                  value={formatBDT(selectedMaster.discountAmount)}
                   tone="gold"
                 />
                 <CalcTile
                   label="Price After Discount"
-                  value={formatBDT(summary!.priceAfterDiscount)}
+                  value={formatBDT(selectedMaster.priceAfterDiscount)}
                 />
                 <CalcTile
-                  label="VAT"
-                  value={formatBDT(summary!.vatAmount)}
+                  label="VAT Amount"
+                  value={formatBDT(selectedMaster.vatAfterDiscount)}
                 />
                 <CalcTile
-                  label="Price Including VAT"
-                  value={formatBDT(summary!.priceIncludingVat)}
+                  label="Gross Value"
+                  value={formatBDT(selectedMaster.grossValue)}
                   strong
                 />
               </div>
 
-              {/* Action bar */}
               <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#E5E7EB] bg-[#FAFBFC] px-5 py-4">
                 <button
                   onClick={() => setConfirmMode("discard")}
@@ -762,11 +627,11 @@ export default function ProductReturnApproval() {
           </div>
         )}
 
-        {/* -------- Confirm dialog (native <dialog>, page level) -------- */}
-        {confirmMode && selected && (
+        {/* CONFIRMATION DIALOG */}
+        {confirmMode && selectedMaster && (
           <ConfirmDialog
             mode={confirmMode}
-            requestNumber={selected.requestNumber}
+            requestNumber={selectedMaster.returnRequestNo}
             busy={acting}
             onCancel={() => setConfirmMode(null)}
             onConfirm={handleConfirmAction}
@@ -778,7 +643,7 @@ export default function ProductReturnApproval() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Calculation tile (flex mode) — identical to ProductReturnRequest     */
+/* Calculation tile                                                   */
 /* ------------------------------------------------------------------ */
 
 function CalcTile({
@@ -813,9 +678,7 @@ function CalcTile({
         className={`mt-0.5 tabular-nums ${
           strong
             ? "text-[16px] font-bold text-[#10673E]"
-            : tone === "gold"
-              ? "text-[14px] font-semibold text-[#C9A02E]"
-              : "text-[14px] font-semibold text-[#1F2937]"
+            : "text-[14px] font-semibold text-[#1F2937]"
         }`}
       >
         {value}
