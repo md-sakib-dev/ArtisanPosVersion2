@@ -11,11 +11,35 @@ export interface LoginUser {
   roleId: number;
   roleCode: string;
   branchId: number;
+  /** POS counter this login is bound to (used by the sale payloads). */
+  counterId: number;
+  /*
+   * Field casing / nesting of the counter has drifted between backend
+   * builds, so these are read as fallbacks by resolveLoginCounterId.
+   */
+  counterID?: number;
+  counter?: { counterId?: number; id?: number } | null;
   token: string;
   expiresAt: string;
   refreshToken: string;
   refreshTokenExpiresAt: string;
 }
+
+/**
+ * Read the POS counter id out of a login response, tolerating the shapes
+ * seen in the wild (`counterId`, `counterID`, `counter.{counterId|id}`).
+ * Returns 0 when the response carries no usable counter.
+ */
+export const resolveLoginCounterId = (data: LoginUser): number => {
+  const raw =
+    data.counterId ??
+    data.counterID ??
+    data.counter?.counterId ??
+    data.counter?.id ??
+    0;
+
+  return Number(raw) || 0;
+};
 export interface LoginResponse {
   success: boolean;
   message: string;

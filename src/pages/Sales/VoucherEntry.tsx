@@ -22,6 +22,16 @@ import {
   type ReactNode,
 } from "react";
 
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  createVoucherSale,
+  validateVoucher,
+  type VoucherSalePayload,
+} from "../../api/voucherSaleApi";
+import CardPaymentModal from "../../components/CardPaymentModal";
+import MfsPaymentModal from "../../components/MfsPaymentModal";
+import type { ChannelPaymentEntry } from "../../types/payment";
+
 
 // ======================================================
 // TYPES
@@ -32,6 +42,8 @@ interface VoucherItem {
   serial: string;
   expireDate: string;
   qty: number;
+  /** Value returned by the voucher validation API. */
+  amount: number;
 }
 
 type DiscountType = "none" | "percent" | "fixed";
@@ -155,6 +167,29 @@ function formatDate(iso: string): string {
 
 
 // ======================================================
+// DATE / NUMBER HELPERS
+// ======================================================
+
+/* Date input value (yyyy-mm-dd) → ISO string; falls back to now. */
+function toIsoExpireDate(value: string): string {
+  if (!value) {
+    return new Date().toISOString();
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? new Date().toISOString()
+    : date.toISOString();
+}
+
+/* Money rounded to 2 decimals. */
+function r2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+
+// ======================================================
 // FIELD
 // ======================================================
 
@@ -203,6 +238,7 @@ function Field({
 interface VoucherFormProps {
   serial: string;
   expireDate: string;
+  isAdding?: boolean;
   onSerialChange: (value: string) => void;
   onExpireDateChange: (value: string) => void;
   onAdd: () => void;
@@ -211,6 +247,7 @@ interface VoucherFormProps {
 function VoucherForm({
   serial,
   expireDate,
+  isAdding = false,
   onSerialChange,
   onExpireDateChange,
   onAdd,
@@ -278,10 +315,15 @@ function VoucherForm({
       <button
         type="button"
         onClick={onAdd}
-        className={addButtonClass}
+        disabled={isAdding}
+        className={`
+          ${addButtonClass}
+          disabled:cursor-not-allowed
+          disabled:opacity-60
+        `}
       >
         <Plus size={15} />
-        Add
+        {isAdding ? "Adding..." : "Add"}
       </button>
 
     </div>
@@ -574,7 +616,7 @@ function VoucherTable({
                     text-[#17231D]
                   ">
                     {(
-                      item.qty * VOUCHER_DEFAULT_PRICE
+                      item.qty * item.amount
                     ).toFixed(2)}
                   </td>
 
@@ -745,6 +787,8 @@ interface CheckoutSummaryProps {
   customerPhone: string;
   paymentMethod: PaymentMethod;
   cashReceived: string;
+  cardTotal: number;
+  mfsTotal: number;
   onDiscountTypeChange: (value: DiscountType) => void;
   onDiscountAmountChange: (value: string) => void;
   onTotalReceivedChange: (value: string) => void;
@@ -762,6 +806,8 @@ function CheckoutSummary({
   customerPhone,
   paymentMethod,
   cashReceived,
+  cardTotal,
+  mfsTotal,
   onDiscountTypeChange,
   onDiscountAmountChange,
   onTotalReceivedChange,
@@ -940,7 +986,43 @@ function CheckoutSummary({
           </SidebarField>
 
 
-          <SidebarField label="Customer Phone">
+          {cardTotal > 0 && (
+
+            <SidebarField label="Card Amount">
+
+              <input
+                readOnly
+                value={cardTotal.toFixed(2)}
+                className={`
+                  ${readOnlyInputClass}
+                  text-[#10673E]
+                `}
+              />
+
+            </SidebarField>
+
+          )}
+
+
+          {mfsTotal > 0 && (
+
+            <SidebarField label="Mobile Amount">
+
+              <input
+                readOnly
+                value={mfsTotal.toFixed(2)}
+                className={`
+                  ${readOnlyInputClass}
+                  text-[#10673E]
+                `}
+              />
+
+            </SidebarField>
+
+          )}
+
+
+          <SidebarField label="Customer Phone *">
 
             <input
               type="tel"
@@ -1104,6 +1186,8 @@ function ActionButton({
 
 function VoucherEntry() {
 
+  const { user } = useAuth();
+
   // ====================================================
   // VOUCHER FORM STATE
   // ====================================================
@@ -1158,12 +1242,30 @@ function VoucherEntry() {
       type: "success" | "error";
     } | null>(null);
 
+  const [isAdding, setIsAdding] =
+    useState(false);
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const [cardEntries, setCardEntries] =
+    useState<ChannelPaymentEntry[]>([]);
+
+  const [mfsEntries, setMfsEntries] =
+    useState<ChannelPaymentEntry[]>([]);
+
+  const [isCardModalOpen, setIsCardModalOpen] =
+    useState(false);
+
+  const [isMfsModalOpen, setIsMfsModalOpen] =
+    useState(false);
+
 
   // ====================================================
   // ADD VOUCHER
   // ====================================================
 
-  const handleAddVoucher = () => {
+  const handleAddVoucher = async () => {
 
     const serial = serialInput.trim();
 
@@ -1175,19 +1277,57 @@ function VoucherEntry() {
       return;
     }
 
-    setItems((previousItems) => [
-      ...previousItems,
-      {
-        id: nextId,
-        serial,
-        expireDate: expireDateInput,
-        qty: 1,
-      },
-    ]);
+    if (isAdding) {
+      return;
+    }
 
-    setNextId((id) => id + 1);
-    setSerialInput("");
-    setExpireDateInput("");
+    setIsAdding(true);
+
+    try {
+      const result = await validateVoucher(serial);
+
+      if (!result.isValid) {
+        showToast(
+          "Invalid or already used voucher",
+          "error"
+        );
+        return;
+      }
+
+      /* voucherAmount is the voucher's value; keep the default price
+         only when the API omits the amount. */
+      const amount = Number.isFinite(result.voucherAmount)
+        ? result.voucherAmount
+        : VOUCHER_DEFAULT_PRICE;
+
+      setItems((previousItems) => [
+        ...previousItems,
+        {
+          id: nextId,
+          serial,
+          expireDate: toIsoExpireDate(expireDateInput),
+          qty: 1,
+          amount,
+        },
+      ]);
+
+      setNextId((id) => id + 1);
+      setSerialInput("");
+      setExpireDateInput("");
+
+      showToast(
+        "Voucher added",
+        "success"
+      );
+    } catch (error) {
+      console.error("Voucher validation error:", error);
+      showToast(
+        "Unable to validate voucher",
+        "error"
+      );
+    } finally {
+      setIsAdding(false);
+    }
   };
 
 
@@ -1231,7 +1371,7 @@ function VoucherEntry() {
 
   const grossTotal = items.reduce(
     (total, item) =>
-      total + item.qty * VOUCHER_DEFAULT_PRICE,
+      total + item.qty * item.amount,
     0
   );
 
@@ -1252,8 +1392,21 @@ function VoucherEntry() {
     grossTotal - discountValue
   );
 
+  /* Card / MFS entries come from the same modals Sale Entry uses. */
+  const cardTotal = cardEntries.reduce(
+    (sum, entry) => sum + entry.amount,
+    0
+  );
+
+  const mfsTotal = mfsEntries.reduce(
+    (sum, entry) => sum + entry.amount,
+    0
+  );
+
   const received =
-    Number(totalReceived) || 0;
+    (Number(totalReceived) || 0) +
+    cardTotal +
+    mfsTotal;
 
   const refund = Math.max(
     0,
@@ -1296,6 +1449,15 @@ function VoucherEntry() {
     if (method === "cash") {
       setCashReceived(totalReceived);
     }
+
+    /* Card / Mobile open the same modals as Sale Entry. */
+    if (method === "card") {
+      setIsCardModalOpen(true);
+    }
+
+    if (method === "mobile") {
+      setIsMfsModalOpen(true);
+    }
   };
 
 
@@ -1323,7 +1485,7 @@ function VoucherEntry() {
   // SAVE
   // ====================================================
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
 
     if (items.length === 0) {
       showToast(
@@ -1333,11 +1495,114 @@ function VoucherEntry() {
       return;
     }
 
-    showToast(
-      `Sale saved — ${totalDue.toFixed(2)} BDT`,
-      "success"
+    if (!customerPhone.trim()) {
+      showToast(
+        "Customer phone number is required",
+        "error"
+      );
+      return;
+    }
+
+    if (isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    const totalQty = items.reduce(
+      (sum, item) => sum + item.qty,
+      0
     );
-  }, [items, totalDue, showToast]);
+
+    const payload: VoucherSalePayload = {
+      master: {
+        invoiceType: "Voucher",
+        branchId: user?.branchId ?? 0,
+        counterId: user?.counterId ?? 0,
+        customerContact: customerPhone.trim(),
+        invoiceDate: new Date().toISOString(),
+        totalQty,
+        totalProdPrice: r2(grossTotal),
+        discountId: 0,
+        discountPercent:
+          discountType === "percent"
+            ? Number(discountAmount) || 0
+            : 0,
+        discountAmt: r2(discountValue),
+        adjustmentAmt: 0,
+        priceAftrDiscount: r2(totalDue),
+        vatBfrDiscount: 0,
+        vatAftrDiscount: 0,
+        returnAmt: 0,
+        totalPayableAmt: r2(totalDue),
+        totalPaid: r2(received),
+        changeAmt: r2(refund),
+        changeType: paymentMethod,
+        changeRefNo: "",
+      },
+      details: items.map((item) => ({
+        voucherSerial: item.serial,
+        voucherAmount: item.amount,
+        expireDate: item.expireDate,
+      })),
+    };
+
+    try {
+      const result = await createVoucherSale(payload);
+
+      if (result?.success === false) {
+        showToast(
+          result.message ||
+            "The voucher sale could not be saved.",
+          "error"
+        );
+        return;
+      }
+
+      /* Reset the table, form and checkout state. */
+      setItems([]);
+      setNextId(1);
+      setSerialInput("");
+      setExpireDateInput("");
+      setDiscountType("none");
+      setDiscountAmount("");
+      setTotalReceived("");
+      setCustomerPhone("");
+      setPaymentMethod("cash");
+      setCashReceived("");
+      setCardEntries([]);
+      setMfsEntries([]);
+      setIsCardModalOpen(false);
+      setIsMfsModalOpen(false);
+
+      showToast(
+        `Sale saved — ${totalDue.toFixed(2)} BDT`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Save voucher sale error:", error);
+      showToast(
+        "Unable to save the voucher sale",
+        "error"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    items,
+    isSaving,
+    user,
+    customerPhone,
+    grossTotal,
+    discountType,
+    discountAmount,
+    discountValue,
+    totalDue,
+    received,
+    refund,
+    paymentMethod,
+    showToast,
+  ]);
 
 
   // ====================================================
@@ -1400,6 +1665,7 @@ function VoucherEntry() {
         <VoucherForm
           serial={serialInput}
           expireDate={expireDateInput}
+          isAdding={isAdding}
           onSerialChange={setSerialInput}
           onExpireDateChange={
             setExpireDateInput
@@ -1462,6 +1728,8 @@ function VoucherEntry() {
           customerPhone={customerPhone}
           paymentMethod={paymentMethod}
           cashReceived={cashReceived}
+          cardTotal={cardTotal}
+          mfsTotal={mfsTotal}
           onDiscountTypeChange={
             setDiscountType
           }
@@ -1532,6 +1800,23 @@ function VoucherEntry() {
         />
 
       </footer>
+
+
+      {/* ================================================= */}
+      {/* PAYMENT MODALS (same as Sale Entry) */}
+      {/* ================================================= */}
+
+      <CardPaymentModal
+        open={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        onCardEntriesChange={setCardEntries}
+      />
+
+      <MfsPaymentModal
+        open={isMfsModalOpen}
+        onClose={() => setIsMfsModalOpen(false)}
+        onMfsEntriesChange={setMfsEntries}
+      />
 
 
       {/* ================================================= */}

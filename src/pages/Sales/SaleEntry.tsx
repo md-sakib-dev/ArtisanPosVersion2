@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Scan,
   Package,
   Hash,
@@ -26,7 +27,7 @@ import {
   UserRound,
 } from "lucide-react";
 import logo from "../../assets/logo.png"
-import { useState,  type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {getProductByBarcode} from "../../api/productApi";
 import { Link } from "react-router-dom";
 import type { MasterProduct } from "../../types/product";
@@ -35,6 +36,35 @@ import MfsPaymentModal from "../../components/MfsPaymentModal";
 import SlipPaymentModal from "../../components/SlipPaymentModal";
 import VoucherPaymentModal from "../../components/VoucherPaymentModal";
 import CustomerInfoModal from "../../components/CustomerInfoModal";
+import ResumeInvoiceModal from "../../components/ResumeInvoiceModal";
+import BillReceipt from "../../components/BillReceipt";
+import {
+  DEFAULT_STORE_INFO,
+  formatReceiptDate,
+  type BillItem,
+  type BillSaleData,
+} from "../../utils/billReceipt";
+import {
+  PAYMENT_CHANNEL_IDS,
+  type ChannelPaymentEntry,
+} from "../../types/payment";
+import {
+  getCustomerByPhone,
+  type RegularSaleCustomer,
+} from "../../api/customerApi";
+import {
+  createRegularSale,
+  postTempSalesInfo,
+  getTempSalesInfo,
+  type RegularSaleDetailDto,
+  type RegularSalePayload,
+  type RegularSalePaymentDto,  createPausedSale,
+  type PausedSalePayload,
+  type PausedInvoiceDetailDto,
+  type PausedInvoiceListItemDto,
+} from "../../api/regularSaleApi";
+import { classifyApiError } from "../../api/apiError";
+import { useAuth } from "../../contexts/AuthContext";
 
 // ======================================================
 // TYPES
@@ -311,6 +341,43 @@ function PaymentModal({
 }
 
 // ======================================================
+// BILL HELPERS
+// ======================================================
+
+/* The save response may carry an invoice number in one of a few keys. */
+const readInvoiceNo = (data: unknown): string | null => {
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    const value =
+      record.invoiceNo ?? record.invoiceNumber ?? record.invoiceID;
+
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value);
+    }
+  }
+
+  return null;
+};
+
+/* Fallback: digits built from branch, counter and the sale timestamp. */
+const buildFallbackInvoiceNo = (
+  branchId: number,
+  counterId: number,
+  when: Date,
+): string => {
+  const stamp = [
+    String(when.getFullYear()).slice(-2),
+    String(when.getMonth() + 1).padStart(2, "0"),
+    String(when.getDate()).padStart(2, "0"),
+    String(when.getHours()).padStart(2, "0"),
+    String(when.getMinutes()).padStart(2, "0"),
+    String(when.getSeconds()).padStart(2, "0"),
+  ].join("");
+
+  return `${branchId}${String(counterId).padStart(2, "0")}${stamp}`;
+};
+
+// ======================================================
 // SALE ENTRY
 // ======================================================
 
@@ -318,6 +385,9 @@ function SaleEntry() {
   // ====================================================
   // PRODUCT INPUT
   // ====================================================
+  const { user } = useAuth();
+  const myBranchId = user?.branchId ?? 0;
+  const counterId = user?.counterId ?? 0;
   const [barcodeInput, setBarcodeInput] = useState("");
 
   const [spCodeInput, setSpCodeInput] = useState("");
@@ -363,20 +433,60 @@ function SaleEntry() {
   // PAYMENT MODALS
   // ====================================================
 
-  const [cardPaymentTotal, setCardPaymentTotal] = useState<number>(0);
+  /* Per-entry payment summaries from each modal (amount + channel option). */
+  const [cardEntries, setCardEntries] = useState<ChannelPaymentEntry[]>([]);
 
   const [isMfsPaymentModalOpen, setIsMfsPaymentModalOpen] = useState(false);
-  const [mfsTotal, setMfsTotal] = useState<number>(0);
+  const [mfsEntries, setMfsEntries] = useState<ChannelPaymentEntry[]>([]);
 
   const [isSlipPaymentModalOpen, setIsSlipPaymentModalOpen] = useState(false);
-  const [slipTotal, setSlipTotal] = useState<number>(0);
+  const [slipEntries, setSlipEntries] = useState<ChannelPaymentEntry[]>([]);
 
   const [isVoucherPaymentModalOpen, setIsVoucherPaymentModalOpen] = useState(false);
-  const [voucherTotal, setVoucherTotal] = useState<number>(0);
+  const [voucherEntries, setVoucherEntries] = useState<ChannelPaymentEntry[]>([]);
 
   const [isWalletOpen, setIsWalletOpen] = useState(false);
+  const [mfsModalResetKey, setMfsModalResetKey] = useState(0);
+
+  // ====================================================
+  // SAVE (POST /api/RegularSales)
+  // ====================================================
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPausing, setIsPausing] = useState(false);
+
+  /* Set when the temp-sale sync of a scanned line failed. */
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
+
+  /* Inline success/error notice shown beside the Save button. */
+  const [saveNotice, setSaveNotice] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  /* Change due to the customer, surfaced in a modal after a successful save. */
+  const [changeModal, setChangeModal] = useState<{
+    amount: number;
+    type: string;
+    refNo: string;
+  } | null>(null);
+
+  /* Printable bill snapshot shown (and auto-printed) after a sale. */
+  const [billData, setBillData] = useState<{
+    sale: BillSaleData;
+    items: BillItem[];
+  } | null>(null);
+
+  /* CS No — reference number used when the change is paid by slip. */
+  const [changeRefNo, setChangeRefNo] = useState("");
 
   const [isCustomerInfoOpen, setIsCustomerInfoOpen] = useState(false);
+
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+
+  const [customerInfo, setCustomerInfo] =
+    useState<RegularSaleCustomer | null>(null);
+  const [isCustomerLoading, setIsCustomerLoading] = useState(false);
 
   // ====================================================
   // DELETE AUTHORIZATION
@@ -488,6 +598,35 @@ const handleAddProduct = async () => {
       return;
     }
 
+    /* Keep the backend's temp sale in sync with this add. A failure
+       must not block the cashier: the line is still added locally and
+       a dismissible warning is shown instead. */
+    try {
+      const syncResult = await postTempSalesInfo({
+        branchId: user?.branchId ?? 0,
+        counterId: user?.counterId ?? 0,
+        userName: user?.username ?? "",
+        productId: foundProduct.id,
+        barcode: foundProduct.barcode,
+        qty: quantity,
+        customerContact: phoneNumber.trim(),
+      });
+
+      if (syncResult?.success === false) {
+        setSyncWarning(
+          syncResult.message || "Temp sale sync failed for this product.",
+        );
+      } else {
+        setSyncWarning(null);
+      }
+    } catch (error) {
+      console.error("Temp sales info error:", error);
+      setSyncWarning(
+        classifyApiError(error)?.message ??
+          "Temp sale sync failed for this product.",
+      );
+    }
+
     setProducts((previousProducts) => {
       const existingIndex = previousProducts.findIndex(
         (product) => product.barcode === foundProduct.barcode,
@@ -526,6 +665,38 @@ const handleAddProduct = async () => {
     alert("Unable to retrieve product");
   }
 };
+
+  // ====================================================
+  // CUSTOMER INFO
+  // ====================================================
+
+  const handleOpenCustomerInfo = async () => {
+    const phone = phoneNumber.trim();
+
+    if (!phone) {
+      alert("Please enter a customer phone number");
+      return;
+    }
+
+    setIsCustomerLoading(true);
+
+    try {
+      const customer = await getCustomerByPhone(phone);
+
+      if (!customer) {
+        alert("Customer not found");
+        return;
+      }
+
+      setCustomerInfo(customer);
+      setIsCustomerInfoOpen(true);
+    } catch (error) {
+      console.error("Error fetching customer:", error);
+      alert("Unable to retrieve customer");
+    } finally {
+      setIsCustomerLoading(false);
+    }
+  };
 
 
   const handleDeleteClick = (id: number) => {
@@ -609,6 +780,12 @@ const handleAddProduct = async () => {
   // PAYMENTS
   // ====================================================
 
+  /* Totals are derived from the per-entry summaries each modal reports. */
+  const cardPaymentTotal = cardEntries.reduce((sum, e) => sum + e.amount, 0);
+  const mfsTotal = mfsEntries.reduce((sum, e) => sum + e.amount, 0);
+  const slipTotal = slipEntries.reduce((sum, e) => sum + e.amount, 0);
+  const voucherTotal = voucherEntries.reduce((sum, e) => sum + e.amount, 0);
+
   const totalReceived =
     Number(cashReceived) +
     Number(cardPaymentTotal) +
@@ -617,15 +794,481 @@ const handleAddProduct = async () => {
     Number(voucherTotal) +
     Number(walletAmount);
 
+  /* Change and due are clamped at zero — neither can go negative. */
   const change =
     totalReceived > netPayable
-      ? totalReceived - netPayable - Number(adjustment)
+      ? Math.max(0, totalReceived - netPayable - Number(adjustment))
       : 0;
 
   const due =
     totalReceived < netPayable
-      ? netPayable - totalReceived - Number(adjustment)
+      ? Math.max(0, netPayable - totalReceived - Number(adjustment))
       : 0;
+
+  // ====================================================
+  // SAVE SALE (POST /api/RegularSales)
+  // ====================================================
+
+  /* Money values are rounded to 2 decimals before leaving the client. */
+  const r2 = (value: number) => Math.round(value * 100) / 100;
+
+  /* Cart line → RegularSales detail DTO. */
+  const buildDetail = (product: CartProduct): RegularSaleDetailDto => {
+    const lineTotal = product.qty * product.unitPrice;
+    const unitDiscAmt = (product.unitPrice * product.disc) / 100;
+    const unitPriceAftrDiscount = product.unitPrice - unitDiscAmt;
+    const totalPriceAftrDiscount =
+      lineTotal - lineTotal * (product.disc / 100);
+
+    return {
+      productId: product.id,
+      barcode: product.barcode,
+      qty: product.qty,
+      unitPrice: r2(product.unitPrice),
+      totalPrice: r2(lineTotal),
+      discountPercent: product.disc,
+      discountAmt: r2(lineTotal - totalPriceAftrDiscount),
+      unitPriceAftrDiscount: r2(unitPriceAftrDiscount),
+      totalPriceAftrDiscount: r2(totalPriceAftrDiscount),
+      unitVAT: r2((product.unitPrice * product.vat) / 100),
+      unitVATAftrDiscount: r2((unitPriceAftrDiscount * product.vat) / 100),
+      vatPercent: product.vat,
+      vatCategoryId: 0,
+      /* This screen prices products VAT-exclusive — VAT is added on
+         top of the discounted price, so these amounts are not
+         VAT-inclusive. */
+      isIncludingVAT: false,
+    };
+  };
+
+  const buildSalePayload = (): RegularSalePayload => {
+    /* VAT on the undiscounted line totals (VAT before discount). */
+    const vatBfrDiscount = products.reduce(
+      (total, product) =>
+        total + (product.qty * product.unitPrice * product.vat) / 100,
+      0,
+    );
+
+    /* One payment row per entry that was actually used; each row carries
+       the channelId and the channel option chosen in its modal. */
+    const paymentRows: RegularSalePaymentDto[] = [];
+
+    /* Channel ids: Cash 1, MFS 2, Card 3, Voucher 5, Slip 6. Wallet has
+       no configured channel yet, so it is sent as 0. */
+    const addPayment = (
+      channelId: number,
+      paidAmt: number,
+      channelOptionId = 0,
+      refNo = "",
+    ) => {
+      if (paidAmt > 0) {
+        paymentRows.push({
+          channelId,
+          channelOptionId,
+          paidAmt: r2(paidAmt),
+          refNo,
+        });
+      }
+    };
+
+    addPayment(PAYMENT_CHANNEL_IDS.cash, Number(cashReceived));
+
+    cardEntries.forEach((entry) =>
+      addPayment(
+        PAYMENT_CHANNEL_IDS.card,
+        entry.amount,
+        entry.channelOptionId,
+      ),
+    );
+
+    mfsEntries.forEach((entry) =>
+      addPayment(PAYMENT_CHANNEL_IDS.mfs, entry.amount, entry.channelOptionId),
+    );
+
+    slipEntries.forEach((entry) =>
+      addPayment(
+        PAYMENT_CHANNEL_IDS.slip,
+        entry.amount,
+        entry.channelOptionId,
+        entry.refNo ?? "",
+      ),
+    );
+
+    voucherEntries.forEach((entry) =>
+      addPayment(
+        PAYMENT_CHANNEL_IDS.voucher,
+        entry.amount,
+        entry.channelOptionId,
+      ),
+    );
+
+    addPayment(0, Number(walletAmount));
+
+    return {
+      master: {
+        invoiceType: "Sale",
+        branchId: user?.branchId ?? 0,
+        counterId: user?.counterId ?? 0,
+        userName: user?.username ?? "",
+        customerContact: phoneNumber.trim(),
+        invoiceDate: new Date().toISOString(),
+        totalQty,
+        totalProdPrice: r2(grossTotal),
+        discountId: 0,
+        discountPercent: invoiceDiscount,
+        discountAmt: r2(productDiscount + invoiceDiscountAmount),
+        adjustmentAmt: r2(Number(adjustment)),
+        priceAftrDiscount: r2(netPayableBeforeVat),
+        vatBfrDiscount: r2(vatBfrDiscount),
+        vatAftrDiscount: r2(totalVat),
+        returnAmt: 0,
+        totalPayableAmt: r2(netPayable),
+        totalPaid: r2(totalReceived),
+        changeAmt: r2(change),
+        changeType: refundType,
+        changeRefNo: refundType === "Slip" ? changeRefNo.trim() : "",
+      },
+      details: products.map(buildDetail),
+      payments: paymentRows,
+    };
+  };
+
+  /* Clear the till for the next customer. */
+  const resetSale = () => {
+    setProducts([]);
+    setBarcodeInput("");
+    setSpCodeInput("");
+    setQtyInput(1);
+    setPhoneNumber("");
+    setCustomerInfo(null);
+    setInvoiceDiscount(0);
+    setAdjustment(0);
+    setCashReceived(0);
+    setRefundType("Cash");
+    setChangeRefNo("");
+    setCardEntries([]);
+    setMfsEntries([]);
+    setSlipEntries([]);
+    setVoucherEntries([]);
+    setWalletAmount(0);
+    setSyncWarning(null);
+  };
+
+  const handleSaveSale = async () => {
+    if (products.length === 0) {
+      setSaveNotice({
+        type: "error",
+        message: "Add at least one product before saving the sale.",
+      });
+      return;
+    }
+
+    if (!phoneNumber.trim()) {
+      setSaveNotice({
+        type: "error",
+        message: "Customer phone number is required.",
+      });
+      return;
+    }
+
+    if (due > 0) {
+      setSaveNotice({
+        type: "error",
+        message: `Cannot save \u2014 the sale still has a due of ${due.toFixed(2)}.`,
+      });
+      return;
+    }
+
+    if (isSaving) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveNotice(null);
+
+    /* Captured before resetSale() clears the till. */
+    const changeAmount = change;
+    const changeType = refundType;
+    const changeRef = changeRefNo;
+
+    try {
+      const result = await createRegularSale(buildSalePayload());
+
+      if (result?.success === false) {
+        setSaveNotice({
+          type: "error",
+          message: result.message || "The sale could not be saved.",
+        });
+        return;
+      }
+
+      /* Snapshot everything the receipt needs before the till is cleared. */
+      const billItems: BillItem[] = products.map((product) => ({
+        name: product.prodName,
+        barcode: product.barcode,
+        vatPercent: product.vat,
+        qty: product.qty,
+        unitPrice: product.unitPrice,
+        total: r2(product.qty * product.unitPrice),
+      }));
+
+      const paymentParts = [
+        Number(cashReceived) > 0 ? "Cash" : null,
+        Number(cardPaymentTotal) > 0 ? "Card" : null,
+        Number(mfsTotal) > 0 ? "MFS" : null,
+        Number(slipTotal) > 0 ? "Slip" : null,
+        Number(voucherTotal) > 0 ? "Voucher" : null,
+        Number(walletAmount) > 0 ? "Wallet" : null,
+      ].filter((part): part is string => part !== null);
+
+      const billSnapshot: BillSaleData = {
+        invoiceNo:
+          readInvoiceNo(result?.data) ??
+          buildFallbackInvoiceNo(myBranchId, counterId, new Date()),
+        date: formatReceiptDate(new Date()),
+        invoiceBy: user?.displayName || user?.username || "Cashier",
+        totalQty,
+        totalProductPrice: r2(grossTotal),
+        discountPercent: invoiceDiscount,
+        discountAmount: r2(productDiscount + invoiceDiscountAmount),
+        adjustmentAmount: r2(Number(adjustment)),
+        subTotal: r2(netPayableBeforeVat),
+        exchangedProductAmount: 0,
+        vatAmount: r2(totalVat),
+        totalPayable: r2(netPayable),
+        cashAmount: r2(Number(cashReceived)),
+        cardAmount: r2(Number(cardPaymentTotal)),
+        mfsAmount: r2(Number(mfsTotal)),
+        slipAmount: r2(Number(slipTotal)),
+        voucherAmount: r2(Number(voucherTotal)),
+        totalReceived: r2(totalReceived),
+        changeAmount: r2(changeAmount),
+        paymentMode: paymentParts.length ? paymentParts.join(" + ") : "Cash",
+      };
+
+      resetSale();
+      setMfsModalResetKey((prev) => prev + 1); // Reset MFS modal state
+      setSaveNotice({ type: "success", message: "Sale saved successfully." });
+
+      /* Show the bill and auto-trigger the print dialog. */
+      setBillData({ sale: billSnapshot, items: billItems });
+
+      /* Surface the change due to the customer. */
+      if (changeAmount > 0) {
+        setChangeModal({
+          amount: changeAmount,
+          type: changeType,
+          refNo: changeRef,
+        });
+      }
+    } catch (error) {
+      console.error("Save sale error:", error);
+      setSaveNotice({
+        type: "error",
+        message: classifyApiError(error)?.message ?? "Unable to save the sale.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const handlePauseSale = async () => {
+
+    if (products.length === 0) {
+      setSaveNotice({
+        type: "error",
+        message: "Add at least one product before pausing the sale.",
+      });
+      return;
+    }
+    if (!phoneNumber.trim()) {
+      setSaveNotice({
+        type: "error",
+        message: "Customer phone number is required.",
+      });
+      return;
+    }
+    if (isPausing) {
+      return;
+    }
+    setIsPausing(true);
+    setSaveNotice(null);
+    try{
+      const payload: PausedSalePayload = {
+        master: {
+          invoiceType: "REGULAR",
+          branchId: user?.branchId ?? 0,
+          counterId: user?.counterId ?? 0,
+          CustomerContact: phoneNumber.trim(),
+      },
+      details: products.map((product) => ({
+        productId: product.id,
+        barcode: product.barcode, 
+        qty: product.qty, 
+
+    })),
+    };
+    const result = await createPausedSale(payload);
+    if (result&&(result as any)?.success===false) {
+      setSaveNotice({
+        type: "error",
+        message: (result as any)?.message ?? "Unable to pause the sale.",
+      });
+    }
+    resetSale();
+   setMfsModalResetKey((prev) => prev + 1); // Reset MFS modal state
+   setSaveNotice({ type: "success", message: "Sale paused successfully." });
+    }
+    catch (error) {
+      console.error("Pause sale error:", error);
+      setSaveNotice({
+        type: "error",
+        message: classifyApiError(error)?.message ?? "Unable to pause the sale.",
+      });
+    }
+    finally {
+      setIsPausing(false);
+    }
+  }
+  
+
+  // ====================================================
+  // RESUME PAUSED INVOICE
+  // ====================================================
+
+  /* Drop the fetched paused-invoice lines straight into the sale table,
+     mirroring the temp-sale mapping (the detail rows only carry a subset
+     of a full product, so the remaining fields get safe defaults). */
+  const handleResumeLoad = (
+    items: PausedInvoiceDetailDto[],
+    invoice: PausedInvoiceListItemDto,
+  ) => {
+    const mappedProducts: CartProduct[] = items.map((item) => ({
+      id: item.productId,
+      barcode: item.barcode,
+      prodName: item.fullName || item.shortName,
+      group: "",
+      type: "",
+      category: null,
+      style: null,
+      brandName: "",
+      size: "",
+      color: null,
+      unitPrice: item.salesPrice,
+      disc: 0,
+      vat: item.vatPercent,
+      productDescription: "",
+      qty: item.qty,
+      spCode: "",
+    }));
+
+    setProducts(mappedProducts);
+
+    if (invoice.customerContact) {
+      setPhoneNumber(invoice.customerContact);
+    }
+
+    setIsResumeModalOpen(false);
+    setSaveNotice({
+      type: "success",
+      message: `Paused invoice ${invoice.invoiceNo} loaded.`,
+    });
+  };
+
+  /* Notices fade away on their own after 3 seconds. */
+  useEffect(() => {
+    if (!saveNotice) return;
+
+    const timeoutId = setTimeout(() => setSaveNotice(null), 3000);
+    return () => clearTimeout(timeoutId);
+  }, [saveNotice]);
+
+  /* The action bar labels the button "Save [F2]" — keep F2 working. */
+  const saveSaleRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    saveSaleRef.current = handleSaveSale;
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "F2") {
+        event.preventDefault();
+        saveSaleRef.current();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    
+  }, []);
+
+  useEffect(() => {
+  const loadTempSales = async () => {
+    if (!myBranchId || !counterId) {
+      console.warn(
+        "[sale] Skipping temp-sale load — branchId/counterId not ready.",
+        { branchId: myBranchId, counterId },
+      );
+      return;
+    }
+
+    try {
+      console.log("[sale] Loading temp sales for:", {
+        branchId: myBranchId,
+        counterId,
+      });
+
+      const res = await getTempSalesInfo(myBranchId, counterId);
+
+      console.log("[sale] Temp sales result:", res);
+
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        // Map backend DTO fields to match the CartProduct[] structure. The
+        // temp-sale row only carries a subset of a full product, so the
+        // remaining MasterProduct fields are filled with safe defaults.
+        const mappedProducts: CartProduct[] = res.data.map((item) => ({
+          id: item.productId,
+          barcode: item.barcode,
+          prodName: item.fullName || item.shortName,
+          group: "",
+          type: "",
+          category: null,
+          style: null,
+          brandName: "",
+          size: "",
+          color: null,
+          unitPrice: item.salesPrice,
+          disc: 0,
+          vat: item.vatPercent,
+          productDescription: "",
+          qty: item.qty,
+          spCode: "",
+        }));
+
+        setProducts(mappedProducts);
+
+        // Restore the customer phone that was saved with the temp sale.
+        const tempContact = res.data.find(
+          (item) => item.customerContact,
+        )?.customerContact;
+
+        if (tempContact) {
+          setPhoneNumber(tempContact);
+        }
+      } else {
+        console.warn(
+          "[sale] No temp sales loaded:",
+          res.message || "empty response",
+          { branchId: myBranchId, counterId, data: res.data },
+        );
+      }
+    } catch (err) {
+      console.error("Failed to load temporary sales:", err);
+    }
+  };
+
+  loadTempSales();
+}, [myBranchId, counterId]);
 
   // ====================================================
   // FULLSCREEN
@@ -748,11 +1391,18 @@ const handleAddProduct = async () => {
         "
         >
           <span>
-            Counter: <b className="text-white">01</b>
+            Branch: <b className="text-white">{myBranchId || "--"}</b>
           </span>
 
           <span>
-            User: <b className="text-white">Cashier</b>
+            Counter: <b className="text-white">{counterId || "--"}</b>
+          </span>
+
+          <span>
+            User:{" "}
+            <b className="text-white">
+              {user?.displayName || user?.username || "Cashier"}
+            </b>
           </span>
 
           <button
@@ -898,7 +1548,7 @@ const handleAddProduct = async () => {
               <div className="flex flex-1 gap-2">
                 {/* Customer Phone */}
                 <div className="flex-[1.3]">
-                  <Field label="Customer Phone" icon={<Phone size={13} />}>
+                  <Field label="Customer Phone *" icon={<Phone size={13} />}>
                     <div className="flex gap-1.5">
                       <input
                         value={phoneNumber}
@@ -908,8 +1558,9 @@ const handleAddProduct = async () => {
                       />
                       <button
                         type="button"
-                        onClick={() => setIsCustomerInfoOpen(true)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] transition-all hover:border-[#0E9351] hover:bg-[#E8F5ED]"
+                        onClick={handleOpenCustomerInfo}
+                        disabled={isCustomerLoading}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] transition-all hover:border-[#0E9351] hover:bg-[#E8F5ED] disabled:cursor-not-allowed disabled:opacity-50"
                         title="Customer Info"
                       >
                         <UserRound size={14} />
@@ -923,8 +1574,12 @@ const handleAddProduct = async () => {
                   <Field label="Adjustment" icon={<Settings size={13} />}>
                     <input
                       type="number"
-                      value={adjustment}
-                      onChange={(e) => setAdjustment(Number(e.target.value))}
+                      value={adjustment === 0 ? "" : adjustment}
+                      onChange={(e) =>
+                        setAdjustment(
+                          e.target.value === "" ? 0 : Number(e.target.value),
+                        )
+                      }
                       className={smallAdjnputClass}
                     />
                   </Field>
@@ -959,6 +1614,43 @@ const handleAddProduct = async () => {
               </div>
             </div>
           </section>
+
+          {/* ================================================= */}
+          {/* TEMP SALE SYNC WARNING */}
+          {/* ================================================= */}
+
+          {syncWarning && (
+            <div
+              className="
+              mt-2
+              flex
+              shrink-0
+              items-center
+              gap-2
+              rounded-md
+              border
+              border-[#E2BA48]
+              bg-[#FFF8E5]
+              px-3
+              py-2
+              text-sm
+              text-[#8A6B00]
+            "
+            >
+              <AlertTriangle size={14} className="shrink-0" />
+
+              <span className="min-w-0 flex-1">{syncWarning}</span>
+
+              <button
+                type="button"
+                onClick={() => setSyncWarning(null)}
+                className="rounded p-0.5 transition hover:bg-black/5"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* ================================================= */}
           {/* PRODUCT TABLE */}
@@ -1398,15 +2090,35 @@ const handleAddProduct = async () => {
                 text="Exchange"
               />
 
-              <ActionButton icon={<Play size={13} />} text="Resume" />
+              <ActionButton
+                icon={<Play size={13} />}
+                text="Resume"
+                onClick={() => setIsResumeModalOpen(true)}
+              />
 
-              <ActionButton icon={<Pause size={13} />} text="Pause" />
+              <ActionButton icon={<Pause size={13} />} text={isPausing ? "Pausing..." : "Pause"} 
+        onClick={handlePauseSale}
+        disabled={isPausing} />
 
               <ActionButton
                 icon={<Save size={13} />}
-                text="Save [F2]"
+                text={isSaving ? "Saving..." : "Save [F2]"}
                 primary
+                onClick={handleSaveSale}
+                disabled={isSaving}
               />
+
+              {saveNotice && (
+                <span
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-sm font-medium ${
+                    saveNotice.type === "success"
+                      ? "border-[#B7E2C7] bg-[#E8F5ED] text-[#10673E]"
+                      : "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  }`}
+                >
+                  {saveNotice.message}
+                </span>
+              )}
             </div>
           </section>
 
@@ -1556,6 +2268,8 @@ const handleAddProduct = async () => {
                     <input
                       type="text"
                       disabled={refundType !== "Slip"}
+                      value={changeRefNo}
+                      onChange={(e) => setChangeRefNo(e.target.value)}
                       className="h-8 w-full rounded-md border border-[#DDE5DF] bg-white px-2 text-sm outline-none focus:border-[#0E9351] disabled:cursor-not-allowed disabled:bg-[#F3F4F2] disabled:text-gray-400"
                       placeholder={refundType === "Slip" ? "CS No" : "Select Slip first"}
                     />
@@ -1612,8 +2326,12 @@ const handleAddProduct = async () => {
               <CompactField label="Cash">
                 <input
                   type="number"
-                  value={cashReceived}
-                  onChange={(e) => setCashReceived(Number(e.target.value))}
+                  value={cashReceived === 0 ? "" : cashReceived}
+                  onChange={(e) =>
+                    setCashReceived(
+                      e.target.value === "" ? 0 : Number(e.target.value),
+                    )
+                  }
                   className="
                     h-9
                     w-full
@@ -1762,30 +2480,35 @@ const handleAddProduct = async () => {
       {/* ================================================= */}
 
       <CardPaymentModal
+      key={mfsModalResetKey}
         open={isCardPaymentModalOpen}
         onClose={() => setIsCardPaymentModalOpen(false)}
-        onCardTotalChange={setCardPaymentTotal}
+        onCardEntriesChange={setCardEntries}
       />
 
       <MfsPaymentModal
+      key={mfsModalResetKey}
         open={isMfsPaymentModalOpen}
         onClose={() => setIsMfsPaymentModalOpen(false)}
-        onMfsTotalChange={setMfsTotal}
+        onMfsEntriesChange={setMfsEntries}
       />
 
       <SlipPaymentModal
+      key={mfsModalResetKey}
         open={isSlipPaymentModalOpen}
         onClose={() => setIsSlipPaymentModalOpen(false)}
-        onSlipTotalChange={setSlipTotal}
+        onSlipEntriesChange={setSlipEntries}
       />
 
       <VoucherPaymentModal
+      key={mfsModalResetKey}
         open={isVoucherPaymentModalOpen}
         onClose={() => setIsVoucherPaymentModalOpen(false)}
-        onVoucherTotalChange={setVoucherTotal}
+        onVoucherEntriesChange={setVoucherEntries}
       />
 
       <PaymentModal
+      key={mfsModalResetKey}
         open={isWalletOpen}
         title="Wallet Payment"
         amount={walletAmount}
@@ -1794,9 +2517,36 @@ const handleAddProduct = async () => {
       />
 
       <CustomerInfoModal
+      key={mfsModalResetKey}
         open={isCustomerInfoOpen}
         onClose={() => setIsCustomerInfoOpen(false)}
+        customer={customerInfo}
       />
+
+      <ResumeInvoiceModal
+        open={isResumeModalOpen}
+        onClose={() => setIsResumeModalOpen(false)}
+        onLoad={handleResumeLoad}
+      />
+
+      <ChangeDueModal
+        open={changeModal !== null}
+        amount={changeModal?.amount ?? 0}
+        changeType={changeModal?.type ?? "Cash"}
+        changeRefNo={changeModal?.refNo ?? ""}
+        onClose={() => setChangeModal(null)}
+      />
+
+      {billData && (
+        <BillReceipt
+          saleData={billData.sale}
+          items={billData.items}
+          cashierName={user?.displayName || user?.username || "Cashier"}
+          storeInfo={{ ...DEFAULT_STORE_INFO, logoUrl: logo }}
+          autoPrint
+          onClose={() => setBillData(null)}
+        />
+      )}
 
       {/* ================================================= */}
       {/* DELETE AUTHORIZATION MODAL */}
@@ -1978,6 +2728,68 @@ const handleAddProduct = async () => {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ======================================================
+// CHANGE DUE MODAL
+// ======================================================
+
+interface ChangeDueModalProps {
+  open: boolean;
+  amount: number;
+  changeType: string;
+  changeRefNo: string;
+  onClose: () => void;
+}
+
+function ChangeDueModal({
+  open,
+  amount,
+  changeType,
+  changeRefNo,
+  onClose,
+}: ChangeDueModalProps) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-sm overflow-hidden rounded-xl border border-[#DDE5DF] bg-white shadow-2xl">
+        <div className="bg-[#10673E] px-5 py-4 text-white">
+          <p className="text-sm font-semibold uppercase tracking-wider text-white/70">
+            Sale Completed
+          </p>
+          <h2 className="mt-0.5 text-lg font-semibold">Change Due</h2>
+        </div>
+
+        <div className="px-5 py-6 text-center">
+          <p className="text-sm font-medium text-[#66736B]">
+            Return to customer
+          </p>
+          <p className="mt-1 text-4xl font-bold tracking-tight text-[#10673E]">
+            ৳{amount.toFixed(2)}
+          </p>
+          <p className="mt-3 text-sm text-[#66736B]">
+            Type:{" "}
+            <span className="font-semibold text-[#17231D]">{changeType}</span>
+            {changeRefNo ? (
+              <>
+                {" \u00b7 "}CS No:{" "}
+                <span className="font-semibold text-[#17231D]">
+                  {changeRefNo}
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        <div className="flex justify-end border-t border-[#DDE5DF] bg-white px-5 py-4">
+          <button type="button" onClick={onClose} className={primaryButtonClass}>
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2171,13 +2983,26 @@ interface ActionButtonProps {
   icon: ReactNode;
   text: string;
   primary?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
 }
 
-function ActionButton({ icon, text, primary = false }: ActionButtonProps) {
+function ActionButton({
+  icon,
+  text,
+  primary = false,
+  onClick,
+  disabled = false,
+}: ActionButtonProps) {
   return (
     <button
       type="button"
-      className={primary ? primaryButtonClass : secondaryButtonClass}
+      onClick={onClick}
+      disabled={disabled}
+      className={`
+        ${primary ? primaryButtonClass : secondaryButtonClass}
+        ${disabled ? "cursor-not-allowed opacity-60" : ""}
+      `}
     >
       {icon}
 

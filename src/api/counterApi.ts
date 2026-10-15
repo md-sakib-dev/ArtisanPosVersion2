@@ -55,11 +55,8 @@ const mapCounter = (row: Record<string, unknown>): POSCounter => ({
   macAddress: (row.macAddress as string) ?? "",
 });
 
-/** GET /api/POSCounters — all POS counters. */
-export const getPOSCounters = async (): Promise<POSCounterListResponse> => {
-  const response = await api.get<unknown>("POSCounters");
-  const body = response.data;
-
+/** Normalize the list endpoint shapes (bare array / wrapper / paged). */
+const normalizeList = (body: unknown): POSCounterListResponse => {
   let rows: unknown[] = [];
   let success = true;
   let message = "";
@@ -84,6 +81,27 @@ export const getPOSCounters = async (): Promise<POSCounterListResponse> => {
     message,
     data: rows.map((row) => mapCounter(row as Record<string, unknown>)),
   };
+};
+
+/** GET /api/POSCounters — all POS counters. */
+export const getPOSCounters = async (): Promise<POSCounterListResponse> => {
+  console.log("getPOSCounters");
+  const response = await api.get<unknown>("POSCounters");
+  return normalizeList(response.data);
+};
+
+/**
+ * GET /api/POSCounters/by-branch/{branchId} — the counters of one branch.
+ * Used to recover the POS counter of a session that has none stored.
+ */
+export const getPOSCountersByBranch = async (
+  branchId: number
+): Promise<POSCounterListResponse> => {
+  
+  const response = await api.get<unknown>(
+    `/POSCounters/by-branch/${branchId}`
+  );
+  return normalizeList(response.data);
 };
 
 /* ------------------------------------------------------------------ */

@@ -75,3 +75,69 @@ export default defineConfig([
 ])
 
 ```
+
+## Deployment & caching
+
+The app shell must never be cached; fingerprinted assets must be cached
+forever. Without the headers below, browsers keep serving an old
+`index.html` (and therefore an old bundle) until the user hard-refreshes.
+
+| File            | Response header                                              |
+| --------------- | ------------------------------------------------------------ |
+| `/index.html`   | `Cache-Control: no-cache` (or `max-age=0, must-revalidate`)  |
+| `/version.json` | `Cache-Control: no-cache`                                    |
+| `/assets/*`     | `Cache-Control: public, max-age=31536000, immutable`         |
+
+`index.html` also carries `Cache-Control` / `Pragma` / `Expires` meta tags,
+but those are only a hint — browsers ignore them for HTTP caching, so set the
+header on the server (or CDN) as well.
+
+nginx:
+
+```nginx
+location = /index.html   { add_header Cache-Control "no-cache"; }
+location = /version.json { add_header Cache-Control "no-cache"; }
+location /assets/        { add_header Cache-Control "public, max-age=31536000, immutable"; }
+```
+
+IIS (`web.config` — one `<location>` per path, so fingerprinted assets keep
+their long cache):
+
+```xml
+<configuration>
+  <location path="index.html">
+    <system.webServer>
+      <staticContent>
+        <clientCache cacheControlMode="DisableCache" />
+      </staticContent>
+    </system.webServer>
+  </location>
+  <location path="version.json">
+    <system.webServer>
+      <staticContent>
+        <clientCache cacheControlMode="DisableCache" />
+      </staticContent>
+    </system.webServer>
+  </location>
+  <location path="assets">
+    <system.webServer>
+      <staticContent>
+        <clientCache cacheControlMode="UseMaxAge" cacheControlMaxAge="365.00:00:00" />
+      </staticContent>
+    </system.webServer>
+  </location>
+</configuration>
+```
+
+Netlify / Vercel / Cloudflare Pages: use a `_headers` file (or `vercel.json`
+`headers`) with the same three rules — `/assets/*` long-lived, everything else
+`no-cache`.
+
+### Automatic updates
+
+Every build is stamped with a unique id (`vite.config.ts`) that is baked into
+the bundle and written to `dist/version.json`. The running app polls that file
+(`src/utils/appUpdate.ts`) and reloads itself — via a cache-busting URL — as
+soon as a newer build is deployed, so open tabs no longer need Ctrl + F5. The
+check pauses while a modal is open and runs once per deployment, so it can
+neither interrupt a transaction nor reload in a loop.

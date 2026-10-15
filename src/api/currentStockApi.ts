@@ -33,6 +33,8 @@ const mapCurrentStock = (row: Record<string, unknown>): CurrentStock => ({
   shortName: String(row.shortName ?? row.ShortName ?? ""),
   fullName: String(row.fullName ?? row.FullName ?? ""),
   quantity: Number(row.quantity ?? row.Quantity ?? row.qty ?? 0),
+  salesPrice: Number(row.salesPrice ?? row.SalesPrice ?? 0),
+  vatPercent: Number(row.vatPercent ?? row.VatPercent ?? 0),
 });
 
 export interface CurrentStock {
@@ -41,6 +43,8 @@ export interface CurrentStock {
   shortName: string;
   fullName: string;
   quantity: number;
+  salesPrice: number;
+  vatPercent: number;
 }
 
 /**

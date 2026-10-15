@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Monitor,
   Plus,
@@ -18,12 +18,12 @@ import {
 } from "lucide-react";
 import { getBranchOptions, type DropdownOption } from "../../api/userApi";
 import {
-  getPOSCounters,
+  getPOSCountersByBranch,
   createPOSCounter,
   updatePOSCounter,
   type POSCounter,
 } from "../../api/counterApi";
-
+import { useAuth } from "../../contexts/AuthContext";
 const getErrMessage = (err: unknown, fallback: string): string => {
   const anyErr = err as { response?: { data?: { message?: string } } };
   return anyErr?.response?.data?.message || fallback;
@@ -107,6 +107,7 @@ interface CounterFormState {
 
 function CounterModal({
   editing,
+  currentBranchId,
   branches,
   branchesLoading,
   branchesError,
@@ -116,6 +117,8 @@ function CounterModal({
   onRetryBranches,
 }: {
   editing: Counter | null;
+  /** Branch of the logged-in user — the branch a new counter is created for. */
+  currentBranchId: number;
   branches: DropdownOption[];
   branchesLoading: boolean;
   branchesError: string | null;
@@ -134,11 +137,42 @@ function CounterModal({
           ipAddress: editing.ipAddress,
           macAddress: editing.macAddress,
         }
-      : { branchId: "", counterName: "", counterCode: "", ipAddress: "", macAddress: "" }
+      : {
+          /* A new counter always belongs to the current branch. */
+          branchId:
+            currentBranchId > 0 ? String(currentBranchId) : "",
+          counterName: "",
+          counterCode: "",
+          ipAddress: "",
+          macAddress: "",
+        }
   );
   const [formError, setFormError] = useState<string | null>(null);
 
   const isEdit = Boolean(editing);
+
+  /*
+   * The branch is fixed to the logged-in user's branch, but the
+   * Dropdown/branches list does not always contain it. Make sure the
+   * selected branch is always present so the disabled select shows it
+   * instead of rendering blank.
+   */
+  const branchOptions = useMemo(() => {
+    const list = branches.map((b) => ({ value: b.value, text: b.text }));
+    const selected = form.branchId;
+
+    if (selected && !list.some((b) => b.value === selected)) {
+      list.unshift({
+        value: selected,
+        text:
+          selected === String(currentBranchId)
+            ? `My Branch #${selected}`
+            : `Branch #${selected}`,
+      });
+    }
+
+    return list;
+  }, [branches, form.branchId, currentBranchId]);
 
   // Open the native dialog on mount (DOM only — no state updates)
   useEffect(() => {
@@ -262,9 +296,9 @@ function CounterModal({
                 <select
                   value={form.branchId}
                   onChange={(e) => update("branchId", e.target.value)}
-                  disabled={
-                    branchesLoading || !!branchesError || saving || isEdit
-                  }
+                  /* The branch is fixed to the logged-in user's branch and
+                     can never be changed, so the select stays disabled. */
+                  disabled
                   required
                   className={`${inputClass} appearance-none pr-9`}
                 >
@@ -275,7 +309,7 @@ function CounterModal({
                         ? "Branches unavailable"
                         : "Select Branch"}
                   </option>
-                  {branches.map((b) => (
+                  {branchOptions.map((b) => (
                     <option key={b.value} value={b.value}>
                       {b.text}
                     </option>
@@ -302,6 +336,12 @@ function CounterModal({
                   )}
                 </div>
               </div>
+              {!isEdit && !branchesError && (
+                <p className="mt-1.5 text-[11.5px] text-[#94A3B8]">
+                  New counters are created for your current branch.
+                </p>
+              )}
+
               {branchesError && (
                 <button
                   type="button"
@@ -466,25 +506,34 @@ export default function CounterManagement() {
   // --------------------------------------------------
   // DATA LOADING
   // --------------------------------------------------
-  const fetchCounters = (): Promise<void> => {
+    const { user } = useAuth();
+
+  const myBranchId = user?.branchId ?? 0;
+  const fetchCounters = useCallback((): Promise<void> => {
+
+  
+  if (!myBranchId) {
+    setLoadError("Branch ID not found");
+    return Promise.resolve();
+  }
     setLoading(true);
-    return getPOSCounters()
-      .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setData(res.data.map(toRow));
-          setLoadError(null);
-        } else {
-          throw new Error(res.message || "Failed to load counters");
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load counters:", err);
-        setLoadError(
-          getErrMessage(err, "Failed to load counters. Please try again.")
-        );
-      })
-      .finally(() => setLoading(false));
-  };
+  return getPOSCountersByBranch(myBranchId) // <-- Pass myBranchId here
+    .then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setData(res.data.map(toRow));
+        setLoadError(null);
+      } else {
+        throw new Error(res.message || "Failed to load counters");
+      }
+    })
+    .catch((err) => {
+      console.error("Failed to load counters:", err);
+      setLoadError(
+        getErrMessage(err, "Failed to load counters. Please try again.")
+      );
+    })
+    .finally(() => setLoading(false));
+  }, [myBranchId]);
 
   /* Initial load — state updates happen inside promise callbacks. */
   useEffect(() => {
@@ -505,31 +554,26 @@ export default function CounterManagement() {
         if (!cancelled) setBranchesLoading(false);
       });
 
-    getPOSCounters()
-      .then((res) => {
-        if (cancelled) return;
-        if (res.success && Array.isArray(res.data)) {
-          setData(res.data.map(toRow));
-          setLoadError(null);
-        } else {
-          throw new Error(res.message || "Failed to load counters");
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("Failed to load counters:", err);
-        setLoadError(
-          getErrMessage(err, "Failed to load counters. Please try again.")
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
     return () => {
       cancelled = true;
     };
   }, []);
+  useEffect(() => {
+    if (myBranchId <= 0) return;
+
+    let cancelled = false;
+
+    /* Defer the fetch so its state updates run after the effect body
+       instead of synchronously inside it. */
+    const timer = window.setTimeout(() => {
+      if (!cancelled) void fetchCounters();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [myBranchId, fetchCounters]);
 
   const filteredData = useMemo(() => {
     if (!searchTerm.trim()) return data;
@@ -792,6 +836,7 @@ export default function CounterManagement() {
         {modalOpen && (
           <CounterModal
             editing={editing}
+            currentBranchId={myBranchId}
             branches={branches}
             branchesLoading={branchesLoading}
             branchesError={branchesError}

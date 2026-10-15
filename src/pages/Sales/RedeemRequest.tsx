@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   Check,
@@ -13,16 +13,19 @@ import {
   X,
   CheckCircle2,
 } from "lucide-react";
+import { 
+  createRedeemRequest, 
+  getRedeemTypes 
+} from "../../api/redeemRequestApi";
+import type { RedeemRequestItemPayload } from "../../api/redeemRequestApi";
 
 // ======================================================
 // TYPES
 // ======================================================
 
-type RedeemType = "Voucher" | "Gift Card" | "Loyalty Points" | "Reward Code";
-
 interface RedeemItem {
   id: number;
-  redeemType: RedeemType;
+  redeemType: string;
   contactNo: string;
   serialNo: string;
   amount: number;
@@ -39,18 +42,11 @@ type Toast = {
 // CONSTANTS
 // ======================================================
 
-const REDEEM_TYPES: RedeemType[] = [
-  "Voucher",
-  "Gift Card",
-  "Loyalty Points",
-  "Reward Code",
-];
-
 /**
- * Default validity window per redeem type, in days.
+ * Default validity window fallback per redeem type, in days.
  * Expiry is auto-calculated when an item is added.
  */
-const EXPIRY_DAYS: Record<RedeemType, number> = {
+const DEFAULT_EXPIRY_DAYS: Record<string, number> = {
   Voucher: 30,
   "Gift Card": 60,
   "Loyalty Points": 90,
@@ -138,6 +134,36 @@ function Toast({
 
 export default function RedeemRequest() {
   // --------------------------------------------------
+  // DROPDOWN STATE
+  // --------------------------------------------------
+  const [redeemTypes, setRedeemTypes] = useState<string[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    getRedeemTypes()
+      .then((types) => {
+        if (isMounted && types.length > 0) {
+          setRedeemTypes(types);
+        } else if (isMounted) {
+          setRedeemTypes(["Voucher", "Gift Card", "Loyalty Points", "Reward Code"]);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setRedeemTypes(["Voucher", "Gift Card", "Loyalty Points", "Reward Code"]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingTypes(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // --------------------------------------------------
   // FORM STATE
   // --------------------------------------------------
   const [redeemType, setRedeemType] = useState("");
@@ -188,22 +214,22 @@ export default function RedeemRequest() {
       return;
     }
 
+    const validityDays = DEFAULT_EXPIRY_DAYS[redeemType] ?? 30;
+
     setItems((previousItems) => [
       ...previousItems,
       {
         id: nextId,
-        redeemType: redeemType as RedeemType,
+        redeemType: redeemType,
         contactNo: contactNo.trim(),
         serialNo: serialNo.trim(),
         amount,
-        expiryDate: addDays(EXPIRY_DAYS[redeemType as RedeemType] ?? 30),
+        expiryDate: addDays(validityDays),
       },
     ]);
 
     setNextId((id) => id + 1);
 
-    /* Keep type + contact (same customer often redeems several
-       codes) — clear the per-item fields. */
     setSerialNo("");
     setAmountInput("");
     serialRef.current?.focus();
@@ -224,27 +250,41 @@ export default function RedeemRequest() {
   }, []);
 
   // --------------------------------------------------
-  // APPLY — POST /api/RedeemRequests (endpoint pending)
+  // APPLY — POST /api/RedeemRequests
   // --------------------------------------------------
   const handleApply = async () => {
     if (submitting || items.length === 0) return;
 
-    /*
-     * TODO: wire to the real API once available, e.g.:
-     *   await saveRedeemRequest({ details: items.map(...) });
-     */
     setSubmitting(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      const payload: RedeemRequestItemPayload[] = items.map((item) => ({
+        redeemType: item.redeemType,
+        referenceNo: item.serialNo,
+        contactNo: item.contactNo,
+        amount: item.amount,
+        expiryDate: new Date(`${item.expiryDate}T00:00:00.000Z`).toISOString(),
+        verificationRequired: true,
+      }));
 
+      const res = await createRedeemRequest(payload);
+
+      if (res.success) {
+        setToast({
+          message: `Request submitted — ${items.length} item(s), ${CURRENCY}${money(totalAmount)}`,
+          type: "success",
+        });
+        setItems([]);
+      } else {
+        setToast({
+          message: res.message || "Failed to submit redeem request.",
+          type: "error",
+        });
+      }
+    } catch (error: any) {
       setToast({
-        message: `Request submitted — ${items.length} item(s), ${CURRENCY}${money(totalAmount)}`,
-        type: "success",
-      });
-      setItems([]);
-    } catch {
-      setToast({
-        message: "Failed to submit redeem request. Please try again.",
+        message:
+          error?.response?.data?.message ||
+          "Failed to submit redeem request. Please try again.",
         type: "error",
       });
     } finally {
@@ -282,9 +322,7 @@ export default function RedeemRequest() {
           />
         )}
 
-        {/* ============================================== */}
-        {/* HEADER                                          */}
-        {/* ============================================== */}
+        {/* HEADER */}
         <header>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#10673E]/10 text-[#10673E]">
@@ -295,16 +333,13 @@ export default function RedeemRequest() {
                 Redeem Request
               </h1>
               <p className="mt-0.5 text-[12.5px] text-[#6B7280]">
-                Queue voucher, gift card &amp; loyalty
-                redeems for approval
+                Queue voucher, gift card &amp; loyalty redeems for approval
               </p>
             </div>
           </div>
         </header>
 
-        {/* ============================================== */}
-        {/* ENTRY CARD                                      */}
-        {/* ============================================== */}
+        {/* ENTRY CARD */}
         <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
             <div className="flex items-center gap-2">
@@ -322,8 +357,7 @@ export default function RedeemRequest() {
           </div>
 
           <div className="grid grid-cols-1 items-start gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
-            {/* REDEEM TYPE — plain select, same as Discount
-                Management / Product Management forms */}
+            {/* REDEEM TYPE */}
             <div>
               <label className="mb-1.5 block text-[12.5px] font-semibold text-[#374151]">
                 Redeem Type <span className="text-red-500">*</span>
@@ -331,14 +365,15 @@ export default function RedeemRequest() {
               <select
                 value={redeemType}
                 onChange={(e) => setRedeemType(e.target.value)}
+                disabled={loadingTypes}
                 className={`h-10 w-full rounded-lg border border-[#D1D5DB] bg-white px-3 text-[13px] outline-none transition-colors focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15 ${
                   redeemType ? "text-[#1F2937]" : "text-[#9CA3AF]"
                 }`}
               >
                 <option value="" disabled>
-                  Select redeem type
+                  {loadingTypes ? "Loading types..." : "Select redeem type"}
                 </option>
-                {REDEEM_TYPES.map((type) => (
+                {redeemTypes.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
@@ -376,7 +411,7 @@ export default function RedeemRequest() {
                 <p className="mt-1 text-[11px] font-medium text-red-500">
                   Enter a valid phone number
                 </p>
-                )}
+              )}
             </div>
 
             {/* SERIAL NO */}
@@ -449,9 +484,7 @@ export default function RedeemRequest() {
           </div>
         </div>
 
-        {/* ============================================== */}
-        {/* SHOWCASE TABLE                                  */}
-        {/* ============================================== */}
+        {/* SHOWCASE TABLE */}
         <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-[#FAFBFC] px-5 py-3">
             <div className="flex items-center gap-2">
@@ -578,9 +611,7 @@ export default function RedeemRequest() {
           </div>
         </div>
 
-        {/* ============================================== */}
-        {/* FOOTER — SUMMARY + APPLY                        */}
-        {/* ============================================== */}
+        {/* FOOTER — SUMMARY + APPLY */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-xs">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[12px] font-semibold text-[#374151]">

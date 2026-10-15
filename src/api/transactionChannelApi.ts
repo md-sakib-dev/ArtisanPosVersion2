@@ -117,6 +117,55 @@ export const getTransactionChannelDropdown =
     return response.data?.data ?? [];
   };
 
+interface RawChannelOption {
+  value?: number | string;
+  id?: number | string;
+  text?: string;
+  name?: string;
+  label?: string;
+}
+
+/**
+ * GET /api/Dropdown/transaction-channel-options/{channelId} — the options
+ * of ONE payment channel (Cash 1, MFS 2, Card 3, Voucher 5, Slip 6).
+ * `value` is the option's channelOptionId sent back with the sale.
+ */
+export const getTransactionChannelOptionsByChannel = async (
+  channelId: number
+): Promise<DropdownOption[]> => {
+  const response = await api.get<unknown>(
+    `Dropdown/transaction-channel-options/${channelId}`
+  );
+  const body = response.data;
+
+  let rows: RawChannelOption[] = [];
+
+  if (Array.isArray(body)) {
+    rows = body as RawChannelOption[];
+  } else if (body && typeof body === "object") {
+    const wrapper = body as {
+      data?: RawChannelOption[] | { items?: RawChannelOption[] } | null;
+    };
+    const raw = wrapper.data;
+
+    if (Array.isArray(raw)) {
+      rows = raw;
+    } else if (raw && typeof raw === "object" && Array.isArray(raw.items)) {
+      rows = raw.items;
+    }
+  }
+
+  return rows
+    .map((row) => ({
+      value: String(row.value ?? row.id ?? ""),
+      text: String(row.text ?? row.name ?? row.label ?? ""),
+    }))
+    .filter(
+      (option) =>
+        option.value !== "" && option.value !== "0" && option.text.trim() !== ""
+    );
+};
+
 /* ------------------------------------------------------------------ */
 /* Create / update                                                     */
 /* ------------------------------------------------------------------ */

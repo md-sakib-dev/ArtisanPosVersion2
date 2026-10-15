@@ -16,12 +16,10 @@ import {
   Package,
   Calculator,
 } from "lucide-react";
+import { getCurrentStockByBarcode, type CurrentStock } from "../../api/currentStockApi";
 import {
-  findInvoicesByContactAndBarcode,
-  saveReturnRequest,
-  type Invoice,
-  type ReturnItem,
-  type SaveReturnPayload,
+  createProductReturn,
+  type ProductReturnPayload,
 } from "../../api/productReturnApi";
 
 /* ------------------------------------------------------------------ */
@@ -82,164 +80,25 @@ const getErrMessage = (err: unknown, fallback: string): string => {
 /** Round to 2 decimals to avoid floating-point drift in totals. */
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-const formatDate = (iso: string) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
 /* ------------------------------------------------------------------ */
-/* Invoice Selection Modal — native <dialog>, Customer-page style       */
+/* Return item — one staged line of the return request                  */
 /* ------------------------------------------------------------------ */
 
-function InvoiceModal({
-  open,
-  loading,
-  invoices,
-  barcode,
-  onClose,
-  onLoad,
-}: {
-  open: boolean;
-  loading: boolean;
-  invoices: Invoice[];
+interface ReturnLineItem {
+  id: number;
+  productId: number;
   barcode: string;
-  onClose: () => void;
-  onLoad: (invoice: Invoice) => void;
-}) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dlg = dialogRef.current;
-    if (!dlg) return;
-
-    if (open) {
-      if (!dlg.open) dlg.showModal();
-    } else if (dlg.open) {
-      dlg.close();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const dlg = dialogRef.current;
-    if (!dlg) return;
-
-    const handleCancel = (e: Event) => {
-      e.preventDefault();
-      onClose();
-    };
-
-    dlg.addEventListener("cancel", handleCancel);
-    return () => dlg.removeEventListener("cancel", handleCancel);
-  }, [onClose]);
-
-  return (
-    <dialog
-      ref={dialogRef}
-      className="m-auto w-full max-w-2xl rounded-2xl border border-[#E5E7EB] bg-white p-0 shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
-    >
-      <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E7EB] px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#10673E]/10 text-[#10673E]">
-              <FileText size={17} />
-            </div>
-            <div>
-              <h2 className="text-[15px] font-bold text-[#1F2937]">
-                Select Invoice
-              </h2>
-              <p className="text-[11.5px] text-[#94A3B8]">
-                Invoices containing barcode {barcode || "—"}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#64748B]"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Modal Body — table, no cards */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center px-6 py-14 text-[#94A3B8]">
-              <Loader2 size={26} className="animate-spin text-[#10673E]" />
-              <p className="mt-3 text-[13px] font-medium">
-                Searching invoices...
-              </p>
-            </div>
-          ) : invoices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-6 py-14 text-[#94A3B8]">
-              <AlertCircle size={28} className="text-red-400" />
-              <p className="mt-2 text-[13px] font-medium">
-                No invoice found for this customer and barcode.
-              </p>
-              <p className="mt-1 text-[12px]">
-                Check the contact number and barcode, then try again.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-[#E5E7EB] bg-[#F8FAFC]">
-                  <th className="px-6 py-3 font-semibold text-[#6B7280]">
-                    Invoice Number
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-[#6B7280]">
-                    Invoice Date
-                  </th>
-                  <th className="px-6 py-3 text-right font-semibold text-[#6B7280]">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F1F5F9]">
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.invoiceNumber}
-                    className="transition-colors hover:bg-[#F8FAFC]"
-                  >
-                    <td className="px-6 py-3 font-semibold text-[#10673E] tabular-nums">
-                      {inv.invoiceNumber}
-                    </td>
-                    <td className="px-6 py-3 text-[#6B7280] tabular-nums">
-                      {formatDate(inv.invoiceDate)}
-                    </td>
-                    <td className="px-6 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onLoad(inv)}
-                        className="rounded-lg bg-[#10673E] px-4 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] active:scale-[0.98]"
-                      >
-                        Load
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="border-t border-[#E5E7EB] bg-[#FAFBFC] px-6 py-3">
-          <p className="text-[12px] text-[#94A3B8]">
-            {loading
-              ? "Please wait..."
-              : `${invoices.length} invoice(s) found — click Load to start the return`}
-          </p>
-        </div>
-      </div>
-    </dialog>
-  );
+  invoiceNo: string;
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  discountPercent: number;
+  totalPrice: number;
+  unitPriceAfterDiscount: number;
+  totalPriceAfterDiscount: number;
+  unitVAT: number;
+  unitVATAfterDiscount: number;
+  vatPercent: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,150 +110,167 @@ export default function ProductReturnRequest() {
   const [customerContact, setCustomerContact] = useState("");
   const [barcode, setBarcode] = useState("");
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [fetching, setFetching] = useState(false);
 
-  /* Invoice modal state */
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-  const [invoiceResults, setInvoiceResults] = useState<Invoice[]>([]);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  /* Fetched product — GET /api/CurrentStocks/by-barcode/{barcode} */
+  const [fetchedProduct, setFetchedProduct] = useState<CurrentStock | null>(
+    null
+  );
 
-  /* Selected line + qty for adding */
-  const [selectedBarcode, setSelectedBarcode] = useState("");
-  const [quantity, setQuantity] = useState("");
+  /* Invoice number + qty for the line being added */
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [discountPercent, setDiscountPercent] = useState("");
 
   /* Return items */
-  const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
+  const [returnItems, setReturnItems] = useState<ReturnLineItem[]>([]);
+  const [nextId, setNextId] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
 
+  const barcodeRef = useRef<HTMLInputElement>(null);
+  const invoiceRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
-  /* Line in the selected invoice matching the scanned barcode */
-  const selectedLine = useMemo(
-    () =>
-      selectedInvoice?.lines.find((l) => l.barcode === selectedBarcode) ?? null,
-    [selectedInvoice, selectedBarcode]
-  );
+  /* Barcode no longer matches the fetched product → clear the preview */
+  const handleBarcodeChange = (value: string) => {
+    setBarcode(value);
+    setFetchedProduct((current) =>
+      current && current.barcode === value.trim() ? current : null
+    );
+  };
 
-  const maxReturnable = selectedLine?.soldQty ?? 0;
+  /* Fetch — GET /api/CurrentStocks/by-barcode/{barcode} */
+  const handleFetch = useCallback(async () => {
+    if (fetching) return;
 
-  /* Find button → search invoices (dummy API) */
-  const handleFind = useCallback(async () => {
-    if (searching) return;
-
-    if (!customerContact.trim()) {
-      setSearchError("Customer contact is required");
-      return;
-    }
-    if (!barcode.trim()) {
+    const code = barcode.trim();
+    if (!code) {
       setSearchError("Barcode is required");
       return;
     }
+
     setSearchError(null);
-    setSearching(true);
-    setInvoiceResults([]);
-    setIsInvoiceModalOpen(true);
+    setFetching(true);
 
     try {
-      const res = await findInvoicesByContactAndBarcode(
-        customerContact,
-        barcode
-      );
-      setInvoiceResults(res.data ?? []);
+      const res = await getCurrentStockByBarcode(code);
+
+      if (!res.success || !res.data) {
+        setFetchedProduct(null);
+        setSearchError(res.message || "Product not found in current stock");
+        return;
+      }
+
+      setFetchedProduct(res.data);
+      setQuantity((q) => (Number(q) >= 1 ? q : "1"));
+      setTimeout(() => invoiceRef.current?.focus(), 50);
     } catch (err) {
-      setToast({
-        message: getErrMessage(err, "Invoice search failed. Please try again."),
-        type: "error",
-      });
-      setIsInvoiceModalOpen(false);
+      setFetchedProduct(null);
+      setSearchError(
+        getErrMessage(err, "Stock lookup failed. Please try again.")
+      );
     } finally {
-      setSearching(false);
+      setFetching(false);
     }
-  }, [customerContact, barcode, searching]);
-
-  /* Load invoice → populate context + focus quantity */
-  const handleLoadInvoice = (invoice: Invoice) => {
-    setSelectedInvoice(invoice);
-    setSelectedBarcode(barcode.trim());
-    setQuantity("1");
-
-    /* Prefill discount % from the invoice line — the operator can override it */
-    const line = invoice.lines.find((l) => l.barcode === barcode.trim());
-    const lineTotal = line ? line.soldQty * line.unitPrice : 0;
-    const pct = line && lineTotal > 0 ? r2((line.discount / lineTotal) * 100) : 0;
-    setDiscountPercent(String(pct));
-
-    setIsInvoiceModalOpen(false);
-    setReturnItems((prev) => prev); // keep existing items
-
-    /* If the invoice holds the barcode in multiple lines (not expected),
-       the first matching line wins. */
-    setTimeout(() => qtyInputRef.current?.focus(), 50);
-  };
+  }, [barcode, fetching]);
 
   /* Add item to the return table */
-  const handleAdd = () => {
-    if (!selectedInvoice || !selectedLine) {
-      setToast({ message: "Please select an invoice first", type: "error" });
+  const handleAdd = async () => {
+    if (fetching || isSaving) return;
+
+    const code = barcode.trim();
+    if (!code) {
+      setToast({ message: "Barcode is required", type: "error" });
+      return;
+    }
+    if (!invoiceNumber.trim()) {
+      setToast({ message: "Invoice number is required", type: "error" });
+      invoiceRef.current?.focus();
       return;
     }
 
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty < 1) {
-      setToast({
-        message: "Quantity must be at least 1",
-        type: "error",
-      });
-      return;
-    }
-    if (qty > maxReturnable) {
-      setToast({
-        message: `Only ${maxReturnable} unit(s) were sold on this invoice line`,
-        type: "error",
-      });
+      setToast({ message: "Quantity must be at least 1", type: "error" });
       return;
     }
 
-    const totalPrice = r2(qty * selectedLine.unitPrice);
-
-    /* Discount: prefilled from the invoice line (%), operator-editable */
+    /* Discount % — operator-editable, defaults to 0 */
     let pct = Number(discountPercent);
     if (!Number.isFinite(pct) || pct < 0) pct = 0;
     if (pct > 100) pct = 100;
-    const lineDiscount = r2((totalPrice * pct) / 100);
-    const netPrice = r2(totalPrice - lineDiscount);
+
+    /* Fetch the product first when it hasn't been looked up yet
+       (or the barcode changed after the last fetch). */
+    let product = fetchedProduct;
+    if (!product || product.barcode !== code) {
+      setFetching(true);
+      try {
+        const res = await getCurrentStockByBarcode(code);
+        if (!res.success || !res.data) {
+          setToast({
+            message: res.message || "Product not found in current stock",
+            type: "error",
+          });
+          return;
+        }
+        product = res.data;
+        setFetchedProduct(res.data);
+      } catch (err) {
+        setToast({
+          message: getErrMessage(err, "Stock lookup failed. Please try again."),
+          type: "error",
+        });
+        return;
+      } finally {
+        setFetching(false);
+      }
+    }
+
+    /* Line calculations */
+    const unitPrice = r2(product.salesPrice);
+    const totalPrice = r2(qty * unitPrice);
+    const unitPriceAfterDiscount = r2(unitPrice * (1 - pct / 100));
+    const totalPriceAfterDiscount = r2(qty * unitPriceAfterDiscount);
+    const vatPercent = product.vatPercent;
+    const unitVAT = r2((unitPrice * vatPercent) / 100);
+    const unitVATAfterDiscount = r2((unitPriceAfterDiscount * vatPercent) / 100);
 
     setReturnItems((prev) => {
-      /* Same invoice + barcode → update the existing row's quantity */
+      /* Same barcode + invoice number already in the table →
+         increase that row's quantity instead of adding another row. */
       const existingIdx = prev.findIndex(
         (it) =>
-          it.invoiceNumber === selectedInvoice.invoiceNumber &&
-          it.barcode === selectedLine.barcode
+          it.barcode === product.barcode &&
+          it.invoiceNo === invoiceNumber.trim()
       );
 
       if (existingIdx >= 0) {
         const existing = prev[existingIdx];
+
+        /* Keep the line's discount % unless a new one is typed */
+        const mergedPct =
+          discountPercent.trim() === "" ? existing.discountPercent : pct;
         const newQty = existing.qty + qty;
-        if (newQty > selectedLine.soldQty) {
-          setToast({
-            message: `Cannot exceed sold quantity (${selectedLine.soldQty}) for this line`,
-            type: "error",
-          });
-          return prev;
-        }
-        const newTotal = r2(newQty * selectedLine.unitPrice);
-        const newDiscount = r2((newTotal * pct) / 100);
-        const updated: ReturnItem = {
+        const newUnitAfter = r2(
+          existing.unitPrice * (1 - mergedPct / 100)
+        );
+
+        const updated: ReturnLineItem = {
           ...existing,
           qty: newQty,
-          totalPrice: newTotal,
-          discount: newDiscount,
-          netPrice: r2(newTotal - newDiscount),
+          discountPercent: mergedPct,
+          totalPrice: r2(newQty * existing.unitPrice),
+          unitPriceAfterDiscount: newUnitAfter,
+          totalPriceAfterDiscount: r2(newQty * newUnitAfter),
+          unitVAT: r2((existing.unitPrice * existing.vatPercent) / 100),
+          unitVATAfterDiscount: r2((newUnitAfter * existing.vatPercent) / 100),
         };
+
         const next = [...prev];
         next[existingIdx] = updated;
         return next;
@@ -403,23 +279,32 @@ export default function ProductReturnRequest() {
       return [
         ...prev,
         {
-          barcode: selectedLine.barcode,
-          invoiceNumber: selectedInvoice.invoiceNumber,
-          productName: selectedLine.productName,
+          id: nextId,
+          productId: product.productId,
+          barcode: product.barcode,
+          invoiceNo: invoiceNumber.trim(),
+          productName: product.fullName,
           qty,
-          unitPrice: selectedLine.unitPrice,
-          discount: lineDiscount,
+          unitPrice,
+          discountPercent: pct,
           totalPrice,
-          netPrice,
-          vat: selectedLine.vat,
-          maxQty: selectedLine.soldQty,
+          unitPriceAfterDiscount,
+          totalPriceAfterDiscount,
+          unitVAT,
+          unitVATAfterDiscount,
+          vatPercent,
         },
       ];
     });
+    setNextId((id) => id + 1);
 
-    /* Reset qty, keep customer + invoice context, refocus for speed */
+    /* Reset the line inputs, keep customer + invoice context,
+       refocus barcode for the next scan */
+    setBarcode("");
+    setFetchedProduct(null);
     setQuantity("1");
-    setTimeout(() => qtyInputRef.current?.focus(), 30);
+    setSearchError(null);
+    setTimeout(() => barcodeRef.current?.focus(), 30);
   };
 
   /* Remove item — immediate */
@@ -433,32 +318,34 @@ export default function ProductReturnRequest() {
     [returnItems]
   );
   const totalDiscount = useMemo(
-    () => r2(returnItems.reduce((s, it) => s + it.discount, 0)),
+    () =>
+      r2(
+        returnItems.reduce(
+          (s, it) => s + (it.totalPrice - it.totalPriceAfterDiscount),
+          0
+        )
+      ),
     [returnItems]
   );
   const priceAfterDiscount = useMemo(
-    () => r2(totalPrice - totalDiscount),
-    [totalPrice, totalDiscount]
+    () => r2(returnItems.reduce((s, it) => s + it.totalPriceAfterDiscount, 0)),
+    [returnItems]
   );
 
-  /* VAT per product % applied to each item's share after discount —
-     same proportional approach as SalesRefund. */
+  /* VAT per product % applied to each item's price after discount. */
+  const vatBeforeDiscount = useMemo(
+    () => r2(returnItems.reduce((s, it) => s + it.qty * it.unitVAT, 0)),
+    [returnItems]
+  );
   const vatAmount = useMemo(
     () =>
-      r2(
-        returnItems.reduce((sum, it) => {
-          const itemShare =
-            totalPrice > 0 ? it.totalPrice / totalPrice : 0;
-          const itemAfterDiscount = it.totalPrice - totalDiscount * itemShare;
-          return sum + (itemAfterDiscount * it.vat) / 100;
-        }, 0)
-      ),
-    [returnItems, totalPrice, totalDiscount]
+      r2(returnItems.reduce((s, it) => s + it.qty * it.unitVATAfterDiscount, 0)),
+    [returnItems]
   );
 
   const priceIncludingVat = r2(priceAfterDiscount + vatAmount);
 
-  /* ---------- Save ---------- */
+  /* ---------- Save — POST /api/ProductReturns ---------- */
   const handleSave = async () => {
     if (isSaving) return;
 
@@ -474,29 +361,36 @@ export default function ProductReturnRequest() {
       return;
     }
 
-    const payload: SaveReturnPayload = {
-      customerContact: customerContact.trim(),
-      items: returnItems.map((it) => ({
-        invoiceNumber: it.invoiceNumber,
+    const payload: ProductReturnPayload = {
+      master: {
+        customerContactNumber: customerContact.trim(),
+        productPrice: totalPrice,
+        discountAmount: totalDiscount,
+        priceAfterDiscount,
+        vatBeforeDiscount,
+        vatAfterDiscount: vatAmount,
+        grossValue: priceIncludingVat,
+      },
+      details: returnItems.map((it) => ({
+        productId: it.productId,
         barcode: it.barcode,
-        productName: it.productName,
+        invoiceNo: it.invoiceNo,
         qty: it.qty,
         unitPrice: it.unitPrice,
-        discount: it.discount,
         totalPrice: it.totalPrice,
-        netPrice: it.netPrice,
-        vat: it.vat,
+        discountPercent: it.discountPercent,
+        unitPriceAfterDiscount: it.unitPriceAfterDiscount,
+        totalPriceAfterDiscount: it.totalPriceAfterDiscount,
+        unitVAT: it.unitVAT,
+        unitVATAfterDiscount: it.unitVATAfterDiscount,
+        vatPercent: it.vatPercent,
+        vatCategoryId: 0,
       })),
-      totalPrice,
-      discount: totalDiscount,
-      priceAfterDiscount,
-      vatAmount,
-      priceIncludingVat,
     };
 
     setIsSaving(true);
     try {
-      const res = await saveReturnRequest(payload);
+      const res = await createProductReturn(payload);
       if (!res.success) throw new Error(res.message);
 
       setToast({
@@ -508,9 +402,9 @@ export default function ProductReturnRequest() {
       setCustomerContact("");
       setBarcode("");
       setSearchError(null);
-      setSelectedInvoice(null);
-      setSelectedBarcode("");
-      setQuantity("");
+      setFetchedProduct(null);
+      setInvoiceNumber("");
+      setQuantity("1");
       setDiscountPercent("");
       setReturnItems([]);
     } catch (err) {
@@ -548,8 +442,8 @@ export default function ProductReturnRequest() {
                 Product Return Request
               </h1>
               <p className="mt-0.5 text-[12.5px] text-[#6B7280]">
-                Create and submit a product return request against an existing
-                sales invoice.
+                Scan a product barcode and submit a return request against an
+                existing sales invoice.
               </p>
             </div>
           </div>
@@ -582,7 +476,7 @@ export default function ProductReturnRequest() {
               </div>
             </div>
 
-            {/* Row 2: Barcode + Find + Invoice / Discount / Qty / Add —
+            {/* Row 2: Barcode + Fetch + Invoice / Discount / Qty / Add —
                 one compact row so a return line can be keyed without
                 jumping between panels */}
             <div className="flex flex-wrap items-end gap-3">
@@ -597,13 +491,14 @@ export default function ProductReturnRequest() {
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
                   />
                   <input
+                    ref={barcodeRef}
                     type="text"
                     value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
+                    onChange={(e) => handleBarcodeChange(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        handleFind();
+                        handleFetch();
                       }
                     }}
                     placeholder="Scan or enter barcode"
@@ -616,22 +511,22 @@ export default function ProductReturnRequest() {
                 </div>
               </div>
 
-              {/* Find */}
+              {/* Fetch — GET /CurrentStocks/by-barcode/{barcode} */}
               <button
                 type="button"
-                onClick={handleFind}
-                disabled={searching}
+                onClick={handleFetch}
+                disabled={fetching}
                 className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
               >
-                {searching ? (
+                {fetching ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : (
                   <Search size={15} />
                 )}
-                Find
+                Fetch
               </button>
 
-              {/* Invoice Number (read-only, loads via Find) */}
+              {/* Invoice Number (entered by the operator) */}
               <div className="w-[170px]">
                 <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
                   Invoice Number
@@ -642,17 +537,23 @@ export default function ProductReturnRequest() {
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
                   />
                   <input
+                    ref={invoiceRef}
                     type="text"
-                    readOnly
-                    value={selectedInvoice?.invoiceNumber ?? ""}
-                    placeholder="Select via Find"
-                    tabIndex={-1}
-                    className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        qtyInputRef.current?.focus();
+                      }
+                    }}
+                    placeholder="Enter invoice no"
+                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] font-semibold text-[#1F2937] outline-none transition-all placeholder:font-normal placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
                   />
                 </div>
               </div>
 
-              {/* Discount % (prefilled from invoice line, operator-editable) */}
+              {/* Discount % (operator-editable, defaults to 0) */}
               <div className="w-[120px]">
                 <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
                   Discount (%)
@@ -675,14 +576,13 @@ export default function ProductReturnRequest() {
                         handleAdd();
                       }
                     }}
-                    disabled={!selectedLine}
                     placeholder="0"
-                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-white pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:ring-2 focus:ring-[#10673E]/15"
                   />
                 </div>
               </div>
 
-              {/* Quantity */}
+              {/* Quantity — user-defined return qty (NOT the stock qty) */}
               <div className="w-[100px]">
                 <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
                   Qty
@@ -704,9 +604,8 @@ export default function ProductReturnRequest() {
                         handleAdd();
                       }
                     }}
-                    disabled={!selectedLine}
                     placeholder="1"
-                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-10 w-full rounded-lg border border-[#D1D5DB] bg-[#F9FAFB] pl-9 pr-3 text-[13px] tabular-nums text-[#1F2937] outline-none transition-all placeholder:text-[#9CA3AF] focus:border-[#10673E] focus:bg-white focus:ring-2 focus:ring-[#10673E]/15"
                   />
                 </div>
               </div>
@@ -715,7 +614,7 @@ export default function ProductReturnRequest() {
               <button
                 type="button"
                 onClick={handleAdd}
-                disabled={!selectedLine || isSaving}
+                disabled={fetching || isSaving}
                 className="flex h-10 items-center gap-2 rounded-lg bg-[#10673E] px-5 text-[13px] font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:bg-[#10673E]"
               >
                 <Plus size={15} />
@@ -731,12 +630,12 @@ export default function ProductReturnRequest() {
           )}
         </div>
 
-        {/* -------- Product context strip (loaded via Find) -------- */}
-        {(selectedLine || selectedInvoice) && (
+        {/* -------- Product context strip (loaded via barcode fetch) -------- */}
+        {fetchedProduct && (
           <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
             <div className="flex flex-wrap items-end gap-3 px-5 py-4">
-              {/* Product context (from selected line) */}
-              <div className="min-w-[220px] flex-1">
+              {/* Product name */}
+              <div className="min-w-[220px] flex-[2]">
                 <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
                   Product
                 </label>
@@ -748,14 +647,69 @@ export default function ProductReturnRequest() {
                   <input
                     type="text"
                     readOnly
-                    value={
-                      selectedLine
-                        ? `${selectedLine.productName} — Sold: ${selectedLine.soldQty}`
-                        : ""
-                    }
-                    placeholder="Loads with the invoice"
+                    value={fetchedProduct.fullName}
                     tabIndex={-1}
-                    className="h-10 w-full cursor-default truncate rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none placeholder:font-normal placeholder:text-[#9CA3AF]"
+                    className="h-10 w-full cursor-default truncate rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] text-[#1F2937] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Stock quantity (reference only — return qty is entered above) */}
+              <div className="w-[130px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Stock Qty
+                </label>
+                <div className="relative">
+                  <Hash
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    value={fetchedProduct.quantity}
+                    tabIndex={-1}
+                    className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold tabular-nums text-[#1F2937] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Sales price */}
+              <div className="w-[150px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  Sales Price
+                </label>
+                <div className="relative">
+                  <Barcode
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    value={formatBDT(fetchedProduct.salesPrice)}
+                    tabIndex={-1}
+                    className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold tabular-nums text-[#1F2937] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* VAT % */}
+              <div className="w-[110px]">
+                <label className="mb-1.5 block text-[12.5px] font-medium text-[#374151]">
+                  VAT (%)
+                </label>
+                <div className="relative">
+                  <BadgePercent
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    value={fetchedProduct.vatPercent}
+                    tabIndex={-1}
+                    className="h-10 w-full cursor-default rounded-lg border border-[#D1D5DB] bg-[#F1F5F9] pl-9 pr-3 text-[13px] font-semibold tabular-nums text-[#1F2937] outline-none"
                   />
                 </div>
               </div>
@@ -803,8 +757,8 @@ export default function ProductReturnRequest() {
                           No return items yet.
                         </p>
                         <p className="mt-1 text-[12px]">
-                          Search an invoice above, set the quantity, and click
-                          Add.
+                          Scan a barcode, enter the invoice number and quantity,
+                          then click Add.
                         </p>
                       </div>
                     </td>
@@ -812,14 +766,14 @@ export default function ProductReturnRequest() {
                 ) : (
                   returnItems.map((it, idx) => (
                     <tr
-                      key={`${it.invoiceNumber}-${it.barcode}`}
+                      key={it.id}
                       className="transition-colors hover:bg-[#F8FAFC]"
                     >
                       <td className="px-4 py-2.5 font-medium text-[#374151] tabular-nums">
                         {it.barcode}
                       </td>
                       <td className="px-4 py-2.5 font-semibold text-[#10673E] tabular-nums">
-                        {it.invoiceNumber}
+                        {it.invoiceNo}
                       </td>
                       <td
                         className="max-w-[260px] truncate px-4 py-2.5 text-[#6B7280]"
@@ -834,13 +788,13 @@ export default function ProductReturnRequest() {
                         {formatBDT(it.unitPrice)}
                       </td>
                       <td className="px-4 py-2.5 text-right text-[#C9A02E] tabular-nums">
-                        {formatBDT(it.discount)}
+                        {formatBDT(it.totalPrice - it.totalPriceAfterDiscount)}
                       </td>
                       <td className="px-4 py-2.5 text-right text-[#374151] tabular-nums">
                         {formatBDT(it.totalPrice)}
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold text-[#10673E] tabular-nums">
-                        {formatBDT(it.netPrice)}
+                        {formatBDT(it.totalPriceAfterDiscount)}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end">
@@ -935,16 +889,6 @@ export default function ProductReturnRequest() {
           </button>
         </div>
       </div>
-
-      {/* -------- Invoice Modal (native <dialog>, page level) -------- */}
-      <InvoiceModal
-        open={isInvoiceModalOpen}
-        loading={searching}
-        invoices={invoiceResults}
-        barcode={barcode}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        onLoad={handleLoadInvoice}
-      />
     </div>
   );
 }

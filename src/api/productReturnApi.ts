@@ -1,4 +1,6 @@
 
+import api from "./axios";
+
 /* ------------------------------------------------------------------ */
 /* Approval: pending return requests                                    */
 /* ------------------------------------------------------------------ */
@@ -335,3 +337,167 @@ export const saveReturnRequest = async (
  *   return response.data;
  * };
  */
+
+/* ------------------------------------------------------------------ */
+/* POST /api/ProductReturns — barcode-based return request             */
+/* ------------------------------------------------------------------ */
+
+/** One detail line of the save payload. */
+export interface ProductReturnDetailDto {
+  productId: number;
+  barcode: string;
+  invoiceNo: string;
+  qty: number;
+  unitPrice: number;
+  totalPrice: number;
+  discountPercent: number;
+  unitPriceAfterDiscount: number;
+  totalPriceAfterDiscount: number;
+  unitVAT: number;
+  unitVATAfterDiscount: number;
+  vatPercent: number;
+  vatCategoryId: number;
+}
+
+/** POST /api/ProductReturns body — master + details. */
+export interface ProductReturnPayload {
+  master: {
+    customerContactNumber: string;
+    productPrice: number;
+    discountAmount: number;
+    priceAfterDiscount: number;
+    vatBeforeDiscount: number;
+    vatAfterDiscount: number;
+    grossValue: number;
+  };
+  details: ProductReturnDetailDto[];
+}
+
+export interface ProductReturnResponse {
+  success: boolean;
+  message: string;
+}
+
+/** POST /api/ProductReturns — save a product return request. */
+export const createProductReturn = async (
+  payload: ProductReturnPayload
+): Promise<ProductReturnResponse> => {
+  const response = await api.post<ProductReturnResponse>(
+    "ProductReturns",
+    payload
+  );
+  return response.data;
+};
+
+
+
+
+
+export interface ProductReturnMaster {
+  returnId: number;
+  requestType: string;
+  returnRequestNo: string;
+  customerContactNumber: string;
+  productPrice: number;
+  discountAmount: number;
+  priceAfterDiscount: number;
+  vatBeforeDiscount: number;
+  vatAfterDiscount: number;
+  grossValue: number;
+  createdBy: number;
+  createdAt: string;
+}
+
+export interface ProductReturnDetail {
+  detailId: number;
+  returnId: number;
+  productId: number;
+  barcode: string;
+  invoiceNo: string;
+  qty: number;
+  unitPrice: number;
+  totalPrice: number;
+  discountPercent: number;
+  unitPriceAfterDiscount: number;
+  totalPriceAfterDiscount: number;
+  unitVAT: number;
+  unitVATAfterDiscount: number;
+  vatPercent: number;
+  vatCategoryId: number;
+}
+
+export interface ProductReturnDetailsResponse {
+  master: ProductReturnMaster;
+  details: ProductReturnDetail[];
+}
+
+export interface ActionResponse {
+  success: boolean;
+  message?: string;
+}
+
+interface RawApiResponse<T> {
+  success?: boolean;
+  message?: string;
+  data: T;
+}
+
+/** 1. Get all pending product returns (handling wrapped or direct array responses) */
+export const getPendingProductReturns = async (): Promise<ProductReturnMaster[]> => {
+  const response = await api.get<RawApiResponse<ProductReturnMaster[]> | ProductReturnMaster[]>(
+    "ProductReturns"
+  );
+  
+  const body = response.data;
+  console.log("getPendingProductReturns response body:", body);
+
+  // Handle both direct array responses and wrapped { success, data } responses
+  if (Array.isArray(body)) {
+    return body;
+  }
+  if (body && typeof body === "object" && "data" in body && Array.isArray(body.data)) {
+    return body.data;
+  }
+
+  return [];
+};
+
+/** 2. Get return details by returnId when load button is clicked */
+export const getProductReturnDetails = async (
+  returnId: number
+): Promise<ProductReturnDetailsResponse> => {
+  const response = await api.get<RawApiResponse<ProductReturnDetailsResponse> | ProductReturnDetailsResponse>(
+    `ProductReturns/${returnId}`
+  );
+  
+  const body = response.data;
+  if (body && typeof body === "object" && "master" in body) {
+    return body as ProductReturnDetailsResponse;
+  }
+  if (body && typeof body === "object" && "data" in body) {
+    return (body as RawApiResponse<ProductReturnDetailsResponse>).data;
+  }
+
+  throw new Error("Invalid response structure for return details");
+};
+
+/** 3. Update authorization status (1 for Approve, 2 for Discard) */
+export const updateProductReturnStatus = async (
+  returnId: number,
+  status: 1 | 2
+): Promise<ActionResponse> => {
+  console.log(`Updating product return ${returnId} status to ${status}`);
+
+  // Matching your redeem request pattern (adjust to PUT or PATCH depending on backend preference)
+  const response = await api.patch<ActionResponse>(
+    `ProductReturns/${returnId}/authorization-status`,
+     status 
+  );
+
+  const body = response.data;
+
+  return {
+    success: body?.success ?? true,
+    message: body?.message ?? "Status updated successfully.",
+  };
+};

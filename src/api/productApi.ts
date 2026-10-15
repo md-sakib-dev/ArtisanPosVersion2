@@ -1,21 +1,40 @@
 import api from "./axios";
-// import type {MasterProduct,ProductApiResponse} from "../types/product";
-import type { MasterProduct} from "../types/product";
+import type {
+  MasterProduct,
+  RegularSaleBarcodeResponse,
+} from "../types/product";
 
 export const getProductByBarcode = async (
   barcode: string
 ): Promise<MasterProduct | null> => {
-  const response = await api.get<MasterProduct[]>("/products/products", {
-    params: {
-      barcode,
-    },
-  });
+  const response = await api.get<RegularSaleBarcodeResponse>(
+    `/RegularSales/barcode/${encodeURIComponent(barcode)}`
+  );
 
   console.log("API response:", response.data);
 
-  if (response.data.length === 0) {
+  const payload = response.data;
+
+  if (!payload?.success || !payload.data) {
     return null;
   }
 
-  return response.data[0];
+  const p = payload.data;
+
+  return {
+    id: p.productId,
+    barcode: p.barcode,
+    prodName: p.shortName,
+    group: "",
+    type: "",
+    category: null,
+    style: null,
+    brandName: "",
+    size: "",
+    color: null,
+    unitPrice: p.salesPrice,
+    disc: 0,
+    vat: p.vatPercent,
+    productDescription: p.fullName,
+  };
 };

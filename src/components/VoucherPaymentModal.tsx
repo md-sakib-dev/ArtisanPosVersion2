@@ -1,5 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Ticket, Plus, Trash2, AlertTriangle, Hash } from "lucide-react";
+import {
+  getTransactionChannelOptionsByChannel,
+  type DropdownOption,
+} from "../api/transactionChannelApi";
+import {
+  PAYMENT_CHANNEL_IDS,
+  type ChannelPaymentEntry,
+} from "../types/payment";
 
 // ======================================================
 // TYPES
@@ -10,23 +18,18 @@ interface VoucherPaymentEntry {
   giftVoucherAmount: number;
   voucherType: string;
   giftVoucherNo: string;
+  channelOptionId: number;
 }
 
 interface VoucherPaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onVoucherTotalChange: (total: number) => void;
+  onVoucherEntriesChange: (entries: ChannelPaymentEntry[]) => void;
 }
 
 // ======================================================
 // OPTIONS
 // ======================================================
-
-const VOUCHER_TYPES = [
-  "Select Voucher Type",
-  "Gift Reward",
-  "WD Gift",
-];
 
 // ======================================================
 // CONFIRM MODAL (Nested)
@@ -109,7 +112,7 @@ function ConfirmClearModal({
 export default function VoucherPaymentModal({
   open,
   onClose,
-  onVoucherTotalChange,
+  onVoucherEntriesChange,
 }: VoucherPaymentModalProps) {
   // ====================================================
   // STATE
@@ -117,11 +120,52 @@ export default function VoucherPaymentModal({
 
   const [entries, setEntries] = useState<VoucherPaymentEntry[]>([]);
   const [giftVoucherAmount, setGiftVoucherAmount] = useState<number>(0);
-  const [voucherType, setVoucherType] = useState<string>(VOUCHER_TYPES[0]);
+  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [giftVoucherNo, setGiftVoucherNo] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  /* Voucher types come from the transaction-channel-options endpoint. */
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.voucher)
+      .then((options) => {
+        if (!cancelled) setChannelOptions(options);
+      })
+      .catch((error) => {
+        console.error("Voucher channel options error:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const selectedChannel = channelOptions.find(
+    (option) => Number(option.value) === channelOptionId,
+  );
+
+  /* Every field is mandatory before an entry can be added. */
+  const isFormValid =
+    giftVoucherAmount > 0 &&
+    channelOptionId > 0 &&
+    giftVoucherNo.trim().length > 0;
+
+  /* Parent only needs the amount + the chosen channel option. */
+  const toSummaries = (list: VoucherPaymentEntry[]): ChannelPaymentEntry[] =>
+    list.map((entry) => ({
+      amount: entry.giftVoucherAmount,
+      channelOptionId: entry.channelOptionId,
+    }));
 
   // ====================================================
   // HANDLERS
@@ -129,54 +173,61 @@ export default function VoucherPaymentModal({
 
   const handleAddPayment = async () => {
     setValidationError("");
+    setSaveNotice(null);
 
     if (!giftVoucherAmount || giftVoucherAmount <= 0) {
       setValidationError("Please enter a valid voucher amount");
+      setSaveNotice({ type: "error", text: "Please enter a valid voucher amount" });
       return;
     }
 
-    if (voucherType === VOUCHER_TYPES[0]) {
+    if (channelOptionId <= 0) {
       setValidationError("Please select a Voucher Type");
+      setSaveNotice({ type: "error", text: "Please select a Voucher Type" });
       return;
     }
 
     if (!giftVoucherNo || giftVoucherNo.trim() === "") {
       setValidationError("Please enter a gift voucher number");
+      setSaveNotice({ type: "error", text: "Please enter a gift voucher number" });
       return;
     }
 
     const newEntry: VoucherPaymentEntry = {
       id: nextId,
       giftVoucherAmount,
-      voucherType,
+      voucherType: selectedChannel?.text ?? "",
       giftVoucherNo: giftVoucherNo.trim(),
+      channelOptionId,
     };
 
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
+    onVoucherEntriesChange(toSummaries(updatedEntries));
     setNextId(nextId + 1);
 
     setGiftVoucherAmount(0);
-    setVoucherType(VOUCHER_TYPES[0]);
+    setChannelOptionId(0);
     setGiftVoucherNo("");
+
+    setSaveNotice({ type: "success", text: "Payment entry added successfully." });
   };
 
   const handleDeleteEntry = (id: number) => {
     const updatedEntries = entries.filter((e) => e.id !== id);
     setEntries(updatedEntries);
 
-    // Recalculate total
-    const total = updatedEntries.reduce((sum, e) => sum + e.giftVoucherAmount, 0);
-    onVoucherTotalChange(total);
+    onVoucherEntriesChange(toSummaries(updatedEntries));
   };
 
   const handleClearClick = () => {
     if (entries.length === 0) {
       // No entries, just reset form
       setGiftVoucherAmount(0);
-      setVoucherType(VOUCHER_TYPES[0]);
+      setChannelOptionId(0);
       setGiftVoucherNo("");
       setValidationError("");
+      setSaveNotice(null);
       return;
     }
     // Show nested confirm modal
@@ -186,13 +237,14 @@ export default function VoucherPaymentModal({
   const handleConfirmClear = () => {
     setEntries([]);
     setGiftVoucherAmount(0);
-    setVoucherType(VOUCHER_TYPES[0]);
+    setChannelOptionId(0);
     setGiftVoucherNo("");
     setValidationError("");
+    setSaveNotice(null);
     setShowConfirmClear(false);
 
-    // Update total to 0
-    onVoucherTotalChange(0);
+    // Clear the parent totals too
+    onVoucherEntriesChange([]);
   };
 
   const handleCancelClear = () => {
@@ -200,8 +252,15 @@ export default function VoucherPaymentModal({
   };
 
   const handleSave = () => {
-    const total = entries.reduce((sum, e) => sum + e.giftVoucherAmount, 0);
-    onVoucherTotalChange(total);
+    if (entries.length === 0) {
+      setSaveNotice({
+        type: "error",
+        text: "Add at least one entry before saving.",
+      });
+      return;
+    }
+
+    onVoucherEntriesChange(toSummaries(entries));
     onClose();
   };
 
@@ -299,13 +358,14 @@ export default function VoucherPaymentModal({
                   Voucher Type
                 </label>
                 <select
-                  value={voucherType}
-                  onChange={(e) => setVoucherType(e.target.value)}
+                  value={channelOptionId}
+                  onChange={(e) => setChannelOptionId(Number(e.target.value))}
                   className="h-10 w-full rounded-lg border border-[#DDE5DF] bg-white px-3 text-sm text-[#17231D] outline-none transition-all focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
                 >
-                  {VOUCHER_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                  <option value={0}>Select Voucher Type</option>
+                  {channelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.text}
                     </option>
                   ))}
                 </select>
@@ -331,7 +391,13 @@ export default function VoucherPaymentModal({
                 <button
                   type="button"
                   onClick={handleAddPayment}
-                  className="h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98]"
+                  disabled={!isFormValid}
+                  title={isFormValid ? undefined : "Fill every field to add"}
+                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                    isFormValid
+                      ? ""
+                      : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"
+                  }`}
                 >
                   <Plus size={16} className="mr-1 inline" />
                   Add Payment
@@ -457,6 +523,18 @@ export default function VoucherPaymentModal({
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {saveNotice && (
+                <span
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                    saveNotice.type === "success"
+                      ? "border-[#B7E2C7] bg-[#E8F5ED] text-[#10673E]"
+                      : "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  }`}
+                >
+                  {saveNotice.text}
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={handleClearClick}
