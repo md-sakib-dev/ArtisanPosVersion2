@@ -17,7 +17,6 @@ import {
   Smartphone,
   Receipt,
   Ticket,
-  Wallet,
   Gift,
   Trash2,
   Maximize2,
@@ -64,6 +63,11 @@ import {
   type PausedInvoiceListItemDto,
 } from "../../api/regularSaleApi";
 import { classifyApiError } from "../../api/apiError";
+import {
+  getTransactionChannelOptions,
+  toChannelDropdownOptions,
+  type TransactionChannelOption,
+} from "../../api/transactionChannelApi";
 import { useAuth } from "../../contexts/AuthContext";
 
 // ======================================================
@@ -447,6 +451,13 @@ function SaleEntry() {
 
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [mfsModalResetKey, setMfsModalResetKey] = useState(0);
+
+  /* Every payment type (Cash / MFS / Card / POS Machine / Voucher / Slip),
+     loaded once with the screen. Each payment modal fills its dropdowns
+     from here by channel id — no extra request per modal. */
+  const [transactionChannelOptions, setTransactionChannelOptions] = useState<
+    TransactionChannelOption[]
+  >([]);
 
   // ====================================================
   // SAVE (POST /api/RegularSales)
@@ -853,8 +864,19 @@ const handleAddProduct = async () => {
        the channelId and the channel option chosen in its modal. */
     const paymentRows: RegularSalePaymentDto[] = [];
 
-    /* Channel ids: Cash 1, MFS 2, Card 3, Voucher 5, Slip 6. Wallet has
-       no configured channel yet, so it is sent as 0. */
+    /* Rows that must be sent even with a 0 amount (the card-type row) are
+       pushed directly instead of via addPayment. */
+    const addPaymentRow = (
+      channelId: number,
+      channelOptionId: number,
+      paidAmt = 0,
+      refNo = "",
+    ) => {
+      paymentRows.push({ channelId, channelOptionId, paidAmt: r2(paidAmt), refNo });
+    };
+
+    /* Channel ids: Cash 1, MFS 2, Card 3, POS Machine 4, Voucher 5,
+       Slip 6. Wallet has no configured channel yet, so it is sent as 0. */
     const addPayment = (
       channelId: number,
       paidAmt: number,
@@ -873,13 +895,30 @@ const handleAddProduct = async () => {
 
     addPayment(PAYMENT_CHANNEL_IDS.cash, Number(cashReceived));
 
-    cardEntries.forEach((entry) =>
+    /* A card payment sends two rows: the channel-3 row records which card
+       type was used (amount 0) and the channel-4 row carries the money with
+       the POS machine option id. */
+    cardEntries.forEach((entry) => {
+      const posMachineId = entry.posMachineId ?? 0;
+
+      if (posMachineId > 0) {
+        addPaymentRow(PAYMENT_CHANNEL_IDS.card, entry.channelOptionId);
+        addPaymentRow(
+          PAYMENT_CHANNEL_IDS.posMachine,
+          posMachineId,
+          entry.amount,
+        );
+        return;
+      }
+
+      /* No POS machine recorded on the entry — keep the amount on the card
+         row so the payment is not lost. */
       addPayment(
         PAYMENT_CHANNEL_IDS.card,
         entry.amount,
         entry.channelOptionId,
-      ),
-    );
+      );
+    });
 
     mfsEntries.forEach((entry) =>
       addPayment(PAYMENT_CHANNEL_IDS.mfs, entry.amount, entry.channelOptionId),
@@ -1269,6 +1308,55 @@ const handleAddProduct = async () => {
 
   loadTempSales();
 }, [myBranchId, counterId]);
+
+  /* Payment-type dropdown values for every modal: GET /api/TransactionChannelOptions
+     once on page load. Every option's value IS the channelOptionId that the
+     sale POST sends back with the payment row. */
+  useEffect(() => {
+    let cancelled = false;
+
+    getTransactionChannelOptions()
+      .then((res) => {
+        if (cancelled) return;
+        setTransactionChannelOptions(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((error) => {
+        console.error("Transaction channel options error:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* Card modal: card type = channel 3, POS machine = channel 4. */
+  const cardChannelOptions = toChannelDropdownOptions(
+    transactionChannelOptions,
+    PAYMENT_CHANNEL_IDS.card,
+  );
+
+  const posMachineOptions = toChannelDropdownOptions(
+    transactionChannelOptions,
+    PAYMENT_CHANNEL_IDS.posMachine,
+  );
+
+  /* MFS modal: provider = channel 2. */
+  const mfsChannelOptions = toChannelDropdownOptions(
+    transactionChannelOptions,
+    PAYMENT_CHANNEL_IDS.mfs,
+  );
+
+  /* Slip modal: slip type = channel 6. */
+  const slipChannelOptions = toChannelDropdownOptions(
+    transactionChannelOptions,
+    PAYMENT_CHANNEL_IDS.slip,
+  );
+
+  /* Voucher modal: voucher type = channel 5. */
+  const voucherChannelOptions = toChannelDropdownOptions(
+    transactionChannelOptions,
+    PAYMENT_CHANNEL_IDS.voucher,
+  );
 
   // ====================================================
   // FULLSCREEN
@@ -2400,12 +2488,6 @@ const handleAddProduct = async () => {
                   onClick={() => setIsVoucherPaymentModalOpen(true)}
                 />
 
-                <PaymentButton
-                  icon={<Wallet size={14} />}
-                  text="Wallet"
-                  onClick={() => setIsWalletOpen(true)}
-                />
-
                 <label className="
                   flex
                   h-9
@@ -2484,6 +2566,8 @@ const handleAddProduct = async () => {
         open={isCardPaymentModalOpen}
         onClose={() => setIsCardPaymentModalOpen(false)}
         onCardEntriesChange={setCardEntries}
+        channelOptions={cardChannelOptions}
+        posMachineOptions={posMachineOptions}
       />
 
       <MfsPaymentModal
@@ -2491,6 +2575,7 @@ const handleAddProduct = async () => {
         open={isMfsPaymentModalOpen}
         onClose={() => setIsMfsPaymentModalOpen(false)}
         onMfsEntriesChange={setMfsEntries}
+        channelOptions={mfsChannelOptions}
       />
 
       <SlipPaymentModal
@@ -2498,6 +2583,7 @@ const handleAddProduct = async () => {
         open={isSlipPaymentModalOpen}
         onClose={() => setIsSlipPaymentModalOpen(false)}
         onSlipEntriesChange={setSlipEntries}
+        channelOptions={slipChannelOptions}
       />
 
       <VoucherPaymentModal
@@ -2505,6 +2591,7 @@ const handleAddProduct = async () => {
         open={isVoucherPaymentModalOpen}
         onClose={() => setIsVoucherPaymentModalOpen(false)}
         onVoucherEntriesChange={setVoucherEntries}
+        channelOptions={voucherChannelOptions}
       />
 
       <PaymentModal

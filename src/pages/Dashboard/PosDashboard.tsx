@@ -14,7 +14,14 @@ import {
   Clock,
   CalendarDays,
   Activity,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  getDashboard,
+  type DashboardData,
+  type WeeklySalesTrendDto,
+} from "../../api/dashboardApi";
+import { classifyApiError } from "../../api/apiError";
 
 /* ------------------------------------------------------------------ */
 /* Live clock                                                           */
@@ -45,23 +52,8 @@ function LiveClock() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Sample data                                                          */
+/* Formatting helpers                                                   */
 /* ------------------------------------------------------------------ */
-
-const TODAY_SALE = 842390;
-const YESTERDAY_SALE = 712400;
-const TODAY_DELTA = ((TODAY_SALE - YESTERDAY_SALE) / YESTERDAY_SALE) * 100;
-
-const WEEK_SALE = 2847392;
-const PREV_WEEK_SALE = 2533120;
-const WEEK_DELTA = ((WEEK_SALE - PREV_WEEK_SALE) / PREV_WEEK_SALE) * 100;
-
-const MONTH_SALE = 10254730;
-const PREV_MONTH_SALE = 9341200;
-const MONTH_DELTA = ((MONTH_SALE - PREV_MONTH_SALE) / PREV_MONTH_SALE) * 100;
-
-const TOTAL_STOCK_VALUE = 1248500;
-const TOTAL_ITEMS = 8492;
 
 const fmt = (n: number) =>
   `৳${new Intl.NumberFormat("en-IN").format(n)}`;
@@ -69,16 +61,21 @@ const fmt = (n: number) =>
 const fmtK = (n: number) =>
   `৳${new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
 
-/* Weekly sales for the bar chart */
-const WEEKLY_SALES = [
-  { day: "Mon", amount: 182000 },
-  { day: "Tue", amount: 224000 },
-  { day: "Wed", amount: 198000 },
-  { day: "Thu", amount: 251000 },
-  { day: "Fri", amount: 286000 },
-  { day: "Sat", amount: 342000 },
-  { day: "Sun", amount: 315000 },
-];
+/* Quantities are doubles (11078.00) — up to two decimals, thousands grouped. */
+const fmtQty = (n: number) =>
+  new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(n);
+
+/* API text can carry embedded line breaks and padding — e.g. the branch
+   address "204/B, - Road\n\r\nDhaka-1212 " — so collapse it to one line. */
+const text = (value: string | null | undefined) =>
+  (value ?? "").replace(/\s+/g, " ").trim();
+
+/* Missing/blank values render as an em dash instead of an empty cell. */
+const shown = (value: string | null | undefined) => {
+  const cleaned = text(value);
+
+  return cleaned === "" ? "—" : cleaned;
+};
 
 const QUICK_ACTIONS = [
   { label: "New Sale", icon: ShoppingCart, path: "/saleentry", color: "bg-[#10673E] text-white", desc: "Open POS terminal" },
@@ -93,7 +90,7 @@ const QUICK_ACTIONS = [
 /* SVG Bar chart                                                        */
 /* ------------------------------------------------------------------ */
 
-function WeeklySalesChart() {
+function WeeklySalesChart({ data }: { data: WeeklySalesTrendDto[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
@@ -105,12 +102,21 @@ function WeeklySalesChart() {
     return () => ro.disconnect();
   }, []);
 
+  if (data.length === 0) {
+    return (
+      <div ref={containerRef} className="flex h-[232px] items-center justify-center text-[12px] text-[#94A3B8]">
+        No sales in this period
+      </div>
+    );
+  }
+
   const padding = { top: 20, right: 16, bottom: 32, left: 56 };
   const chartW = Math.max(0, width - padding.left - padding.right);
   const chartH = 200;
-  const maxVal = Math.max(...WEEKLY_SALES.map((d) => d.amount));
+  /* Falls back to 1 so an all-zero week cannot divide by zero. */
+  const maxVal = Math.max(...data.map((d) => d.amount), 1);
   const barGap = 12;
-  const barW = chartW > 0 ? (chartW - barGap * (WEEKLY_SALES.length - 1)) / WEEKLY_SALES.length : 0;
+  const barW = chartW > 0 ? (chartW - barGap * (data.length - 1)) / data.length : 0;
 
   /* Y-axis ticks */
   const yTicks = 5;
@@ -147,13 +153,13 @@ function WeeklySalesChart() {
         })}
 
         {/* Bars */}
-        {WEEKLY_SALES.map((d, i) => {
+        {data.map((d, i) => {
           const barH = (d.amount / maxVal) * chartH;
           const x = padding.left + i * (barW + barGap);
           const y = padding.top + chartH - barH;
           const isMax = d.amount === maxVal;
           return (
-            <g key={d.day}>
+            <g key={d.date ?? d.label ?? i}>
               <rect
                 x={x}
                 y={y}
@@ -183,7 +189,7 @@ function WeeklySalesChart() {
                 fontSize={11}
                 fontWeight={500}
               >
-                {d.day}
+                {d.label ?? d.date ?? ""}
               </text>
             </g>
           );
@@ -198,6 +204,60 @@ function WeeklySalesChart() {
 /* ------------------------------------------------------------------ */
 
 export default function PosDashboard() {
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  /* Bumped by Retry to re-run the load effect. */
+  const [reloadKey, setReloadKey] = useState(0);
+
+  /* GET /api/Dashboards fills the whole page: user + branch info, the
+     today/week/month sales summaries, the weekly trend and inventory. */
+  useEffect(() => {
+    let cancelled = false;
+
+    getDashboard()
+      .then((res) => {
+        if (cancelled) return;
+
+        if (res.success === false) {
+          setError(res.message || "Unable to load the dashboard.");
+          return;
+        }
+
+        setDashboard(res.data);
+        setError(res.data ? null : "The dashboard returned no data.");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+
+        console.error("Dashboard error:", err);
+        setError(
+          classifyApiError(err)?.message ?? "Unable to load the dashboard.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const user = dashboard?.userInfoDto ?? null;
+  const branch = dashboard?.branchInfoDto ?? null;
+  const inventory = dashboard?.inventorySummaryDto ?? null;
+  const trend = dashboard?.weeklySalesTrend ?? [];
+
+  /* Placeholder while the first load is in flight. */
+  const pending = isLoading ? "…" : "—";
+
+  const handleRetry = () => {
+    setIsLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-[#F5F7F3]">
       <div
@@ -214,10 +274,30 @@ export default function PosDashboard() {
               <Clock size={13} />
               <LiveClock />
               <span className="text-[#D1D5DB]">|</span>
-              <span>Welcome back, <span className="font-medium text-[#374151]">Admin</span></span>
+              <span>
+                Welcome back,{" "}
+                <span className="font-medium text-[#374151]">
+                  {isLoading ? "…" : shown(user?.userName)}
+                </span>
+              </span>
             </p>
           </div>
         </header>
+
+        {/* -------- Load error -------- */}
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-[#F3C2C2] bg-[#FCECEC] px-4 py-3 text-[12.5px] text-[#B84A4A]">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span className="min-w-0 flex-1">{error}</span>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="shrink-0 rounded-md border border-[#E5B4B4] bg-white px-2.5 py-1 text-[11.5px] font-semibold transition hover:bg-[#FFF5F5]"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* -------- Info Cards (3-col) -------- */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -232,15 +312,21 @@ export default function PosDashboard() {
                 <div className="mt-2 space-y-1.5">
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-[#6B7280]">Name</span>
-                    <span className="font-medium text-[#1F2937]">Admin User</span>
+                    <span className="font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(user?.userName)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-[#6B7280]">Designation</span>
-                    <span className="font-medium text-[#1F2937]">Manager</span>
+                    <span className="font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(user?.designation)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-[#6B7280]">Contact</span>
-                    <span className="font-medium text-[#1F2937]">+880 1712-345678</span>
+                    <span className="font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(user?.contact)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -258,15 +344,21 @@ export default function PosDashboard() {
                 <div className="mt-2 space-y-1.5">
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-[#6B7280]">Outlet</span>
-                    <span className="font-medium text-[#1F2937]">Dhanmondi Flagship</span>
+                    <span className="font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(branch?.branchName)}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-[12.5px]">
-                    <span className="text-[#6B7280]">Address</span>
-                    <span className="text-right font-medium text-[#1F2937]">Road 27, Dhanmondi, Dhaka</span>
+                  <div className="flex items-start justify-between gap-3 text-[12.5px]">
+                    <span className="shrink-0 text-[#6B7280]">Address</span>
+                    <span className="text-right font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(branch?.address)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="text-[#6B7280]">VAT Reg.</span>
-                    <span className="font-medium text-[#1F2937]">123456789-0101</span>
+                    <span className="font-medium text-[#1F2937]">
+                      {isLoading ? "…" : shown(branch?.vatReg)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -306,25 +398,37 @@ export default function PosDashboard() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <SalesCard
             label="Today's Sale"
-            value={fmt(TODAY_SALE)}
-            compare={`Yesterday: ${fmt(YESTERDAY_SALE)}`}
-            delta={TODAY_DELTA}
+            value={dashboard?.todaySales ? fmt(dashboard.todaySales.amount) : pending}
+            compare={
+              dashboard?.todaySales
+                ? `Yesterday: ${fmt(dashboard.todaySales.previousAmount)}`
+                : "Yesterday: —"
+            }
+            delta={dashboard?.todaySales?.percentageChange ?? null}
             icon={CalendarDays}
             iconClass="bg-[#10673E]/10 text-[#10673E]"
           />
           <SalesCard
             label="This Week's Sale"
-            value={fmt(WEEK_SALE)}
-            compare={`Last Week: ${fmt(PREV_WEEK_SALE)}`}
-            delta={WEEK_DELTA}
+            value={dashboard?.weekSales ? fmt(dashboard.weekSales.amount) : pending}
+            compare={
+              dashboard?.weekSales
+                ? `Last Week: ${fmt(dashboard.weekSales.previousAmount)}`
+                : "Last Week: —"
+            }
+            delta={dashboard?.weekSales?.percentageChange ?? null}
             icon={Activity}
             iconClass="bg-[#2D5597]/10 text-[#2D5597]"
           />
           <SalesCard
             label="This Month's Sale"
-            value={fmt(MONTH_SALE)}
-            compare={`Last Month: ${fmt(PREV_MONTH_SALE)}`}
-            delta={MONTH_DELTA}
+            value={dashboard?.monthSales ? fmt(dashboard.monthSales.amount) : pending}
+            compare={
+              dashboard?.monthSales
+                ? `Last Month: ${fmt(dashboard.monthSales.previousAmount)}`
+                : "Last Month: —"
+            }
+            delta={dashboard?.monthSales?.percentageChange ?? null}
             icon={BarChart3}
             iconClass="bg-[#3AAFA9]/10 text-[#3AAFA9]"
           />
@@ -344,7 +448,13 @@ export default function PosDashboard() {
               </div>
             </div>
             <div className="mt-4">
-              <WeeklySalesChart />
+              {isLoading ? (
+                <div className="flex h-[232px] items-center justify-center text-[12px] text-[#94A3B8]">
+                  Loading sales trend…
+                </div>
+              ) : (
+                <WeeklySalesChart data={trend} />
+              )}
             </div>
           </div>
 
@@ -363,11 +473,15 @@ export default function PosDashboard() {
             <div className="mt-5 space-y-3">
               <div className="rounded-lg bg-[#F8FAFC] px-3 py-3">
                 <p className="text-[11px] text-[#94A3B8]">Total Value</p>
-                <p className="mt-0.5 text-[18px] font-bold text-[#1F2937] tabular-nums">{fmtK(TOTAL_STOCK_VALUE)}</p>
+                <p className="mt-0.5 text-[18px] font-bold text-[#1F2937] tabular-nums">
+                  {isLoading ? "…" : fmt(inventory?.totalValue ?? 0)}
+                </p>
               </div>
               <div className="rounded-lg bg-[#F8FAFC] px-3 py-3">
                 <p className="text-[11px] text-[#94A3B8]">Total Items in Stock</p>
-                <p className="mt-0.5 text-[18px] font-bold text-[#1F2937] tabular-nums">{new Intl.NumberFormat("en-IN").format(TOTAL_ITEMS)}</p>
+                <p className="mt-0.5 text-[18px] font-bold text-[#1F2937] tabular-nums">
+                  {isLoading ? "…" : fmtQty(inventory?.totalQuantity ?? 0)}
+                </p>
               </div>
             </div>
 
@@ -434,11 +548,12 @@ function SalesCard({
   label: string;
   value: string;
   compare: string;
-  delta: number;
+  /** Backend percentageChange; null while the dashboard has no figure. */
+  delta: number | null;
   icon: typeof TrendingUp;
   iconClass: string;
 }) {
-  const positive = delta >= 0;
+  const positive = (delta ?? 0) >= 0;
   return (
     <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-xs transition-all duration-200 hover:-translate-y-px hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -448,14 +563,16 @@ function SalesCard({
           </div>
           <span className="text-[13px] font-medium text-[#6B7280]">{label}</span>
         </div>
-        <span
-          className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
-            positive ? "bg-[#E8F5ED] text-[#10673E]" : "bg-red-50 text-red-600"
-          }`}
-        >
-          {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-          {Math.abs(delta).toFixed(1)}%
-        </span>
+        {delta !== null && (
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+              positive ? "bg-[#E8F5ED] text-[#10673E]" : "bg-red-50 text-red-600"
+            }`}
+          >
+            {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {Math.abs(delta).toFixed(1)}%
+          </span>
+        )}
       </div>
       <div className="mt-3">
         <p className="text-[22px] font-bold leading-7 tracking-tight text-[#1F2937] tabular-nums">{value}</p>

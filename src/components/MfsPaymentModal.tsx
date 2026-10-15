@@ -25,6 +25,8 @@ interface MfsPaymentModalProps {
   open: boolean;
   onClose: () => void;
   onMfsEntriesChange: (entries: ChannelPaymentEntry[]) => void;
+  /** MFS providers from GET /api/TransactionChannels, loaded by the sale screen. */
+  channelOptions?: DropdownOption[];
 }
 
 // ======================================================
@@ -117,6 +119,7 @@ export default function MfsPaymentModal({
   open,
   onClose,
   onMfsEntriesChange,
+  channelOptions: providedChannelOptions,
 }: MfsPaymentModalProps) {
   // ====================================================
   // STATE
@@ -125,7 +128,12 @@ export default function MfsPaymentModal({
   const [entries, setEntries] = useState<MfsPaymentEntry[]>([]);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [mobileNoLast4, setMobileNoLast4] = useState<string>("");
-  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  /* Options come from the parent; the local fetch below is only a fallback
+     for screens that do not load the channel list themselves. */
+  const [fetchedChannelOptions, setFetchedChannelOptions] = useState<
+    DropdownOption[]
+  >([]);
+  const channelOptions = providedChannelOptions ?? fetchedChannelOptions;
   const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
@@ -137,13 +145,13 @@ export default function MfsPaymentModal({
 
   /* MFS providers come from the transaction-channel-options endpoint. */
   useEffect(() => {
-    if (!open) return;
+    if (!open || providedChannelOptions) return;
 
     let cancelled = false;
 
     getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.mfs)
       .then((options) => {
-        if (!cancelled) setChannelOptions(options);
+        if (!cancelled) setFetchedChannelOptions(options);
       })
       .catch((error) => {
         console.error("MFS channel options error:", error);
@@ -152,7 +160,7 @@ export default function MfsPaymentModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, providedChannelOptions]);
 
   const selectedChannel = channelOptions.find(
     (option) => Number(option.value) === channelOptionId,
@@ -399,6 +407,11 @@ export default function MfsPaymentModal({
                       {option.text}
                     </option>
                   ))}
+                  {channelOptions.length === 0 && (
+                    <option value={0} disabled>
+                      No payment types configured for this channel
+                    </option>
+                  )}
                 </select>
               </div>
 
