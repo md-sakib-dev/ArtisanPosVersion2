@@ -58,12 +58,13 @@ interface DropdownResponse {
 /** GET /api/Dropdown/branches — value = branch ID, text = branch name */
 export const getBranchOptions = async (): Promise<DropdownOption[]> => {
     const response = await api.get<DropdownResponse>("Dropdown/branches");
+    //console.log("Branch Options Response:", response.data);
     return response.data?.data ?? [];
 };
 
 /** GET /api/Dropdown/application-roles — value = role ID, text = role name */
-export const getRoleOptions = async (): Promise<DropdownOption[]> => {
-    const response = await api.get<DropdownResponse>("Dropdown/application-roles");
+export const getRoleOptions = async (systemId: number = 6): Promise<DropdownOption[]> => {
+   const response = await api.get<DropdownResponse>(`Dropdown/application-roles/${systemId}`);
     return response.data?.data ?? [];
 };
 

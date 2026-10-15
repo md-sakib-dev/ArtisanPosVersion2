@@ -514,13 +514,27 @@ export default function CreateUser() {
     let cancelled = false;
     (async () => {
       try {
-        const [branchList, roleList] = await Promise.all([
-          getBranchOptions(),
-          getRoleOptions(),
-        ]);
+       console.log("1. Fetching branches...");
+        const branchList = await getBranchOptions();
+        console.log("2. Branches received successfully:", branchList);
+
+        console.log("3. Fetching roles...");
+        const roleList = await getRoleOptions();
+        console.log("4. Roles received successfully:", roleList);
+
         if (cancelled) return;
-        setBranches(branchList);
-        setRoles(roleList);
+        setBranches(branchList as DropdownOption[]);
+        setRoles(roleList as DropdownOption[]);
+
+//       const [branchList, roleList] = await Promise.all([
+//           getBranchOptions(),
+//           getRoleOptions(),
+          
+//         ]);
+
+//         if (cancelled) return;
+// setBranches(branchList as DropdownOption[]);
+//         setRoles(roleList as DropdownOption[]);
       } catch (err) {
         console.error("Failed to load dropdowns:", err);
         // Non-fatal: modal selects show a retryable loading state.

@@ -63,30 +63,80 @@ interface RawListResponse {
 /** GET /api/TransactionChannelOptions — all payment types. */
 export const getTransactionChannelOptions =
   async (): Promise<TransactionChannelOptionListResponse> => {
+
     const response = await api.get<unknown>("TransactionChannelOptions");
-    const body = response.data;
-
-    let list: TransactionChannelOption[] = [];
-    let success = true;
-    let message = "";
-
-    if (Array.isArray(body)) {
-      list = body as TransactionChannelOption[];
-    } else if (body && typeof body === "object") {
-      const wrapper = body as RawListResponse;
-      success = wrapper.success ?? true;
-      message = wrapper.message ?? "";
-
-      const raw = wrapper.data;
-      if (Array.isArray(raw)) {
-        list = raw;
-      } else if (raw && typeof raw === "object" && Array.isArray(raw.items)) {
-        list = raw.items;
-      }
-    }
-
-    return { success, message, data: list };
+console.log("getTransactionChannelOptions response body:", response.data);
+    return normalizeOptionList(response.data);
+    
   };
+
+/* ------------------------------------------------------------------ */
+/* List normalization                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The list endpoint has been seen returning several shapes, so every list
+ * call is funneled through here:
+ *   - { success, message, data: { items: TransactionChannelOption[] } }
+ *   - { success, message, data: TransactionChannelOption[] }
+ *   - TransactionChannelOption[] (bare array)
+ */
+const normalizeOptionList = (
+  body: unknown
+): TransactionChannelOptionListResponse => {
+  let list: TransactionChannelOption[] = [];
+  let success = true;
+  let message = "";
+
+  if (Array.isArray(body)) {
+    list = body as TransactionChannelOption[];
+  } else if (body && typeof body === "object") {
+    const wrapper = body as RawListResponse;
+    success = wrapper.success ?? true;
+    message = wrapper.message ?? "";
+
+    const raw = wrapper.data;
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (raw && typeof raw === "object" && Array.isArray(raw.items)) {
+      list = raw.items;
+    }
+  }
+
+  return { success, message, data: list };
+};
+
+/* ------------------------------------------------------------------ */
+/* Dropdown: payment types by channel                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Shape ONE channel's payment types for a <select> out of a
+ * GET /api/TransactionChannelOptions payload:
+ *   value = channelOptionId  (this is what the sale POST sends back)
+ *   text  = optionName
+ *
+ * A record only appears when it belongs to `channelId` and has a usable
+ * id + label, so a dropdown can never show a blank line or a 0 value.
+ *
+ * Channel ids (see PAYMENT_CHANNEL_IDS): Cash 1, MFS 2, Card 3,
+ * POS Machine 4, Gift Card/Voucher 5, Credit Slip 6.
+ */
+export const toChannelDropdownOptions = (
+  options: TransactionChannelOption[],
+  channelId: number
+): DropdownOption[] =>
+  options
+    .filter(
+      (option) =>
+        Number(option.channelId) === channelId &&
+        Number(option.channelOptionId) > 0 &&
+        (option.optionName ?? option.optionCode ?? "").trim() !== ""
+    )
+    .map((option) => ({
+      value: String(option.channelOptionId),
+      text: (option.optionName || option.optionCode || "").trim(),
+    }));
 
 /* ------------------------------------------------------------------ */
 /* Dropdown: transaction channels                                      */
@@ -114,6 +164,7 @@ export const getTransactionChannelDropdown =
     const response = await api.get<DropdownResponse>(
       "Dropdown/transaction-channels"
     );
+    
     return response.data?.data ?? [];
   };
 
@@ -137,7 +188,7 @@ export const getTransactionChannelOptionsByChannel = async (
     `Dropdown/transaction-channel-options/${channelId}`
   );
   const body = response.data;
-
+console.log("getTransactionChannelOptionsByChannel response body:", body);
   let rows: RawChannelOption[] = [];
 
   if (Array.isArray(body)) {

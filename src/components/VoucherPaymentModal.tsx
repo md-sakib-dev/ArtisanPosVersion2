@@ -25,6 +25,8 @@ interface VoucherPaymentModalProps {
   open: boolean;
   onClose: () => void;
   onVoucherEntriesChange: (entries: ChannelPaymentEntry[]) => void;
+  /** Voucher types from GET /api/TransactionChannels, loaded by the sale screen. */
+  channelOptions?: DropdownOption[];
 }
 
 // ======================================================
@@ -113,6 +115,7 @@ export default function VoucherPaymentModal({
   open,
   onClose,
   onVoucherEntriesChange,
+  channelOptions: providedChannelOptions,
 }: VoucherPaymentModalProps) {
   // ====================================================
   // STATE
@@ -120,7 +123,12 @@ export default function VoucherPaymentModal({
 
   const [entries, setEntries] = useState<VoucherPaymentEntry[]>([]);
   const [giftVoucherAmount, setGiftVoucherAmount] = useState<number>(0);
-  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  /* Options come from the parent; the local fetch below is only a fallback
+     for screens that do not load the channel list themselves. */
+  const [fetchedChannelOptions, setFetchedChannelOptions] = useState<
+    DropdownOption[]
+  >([]);
+  const channelOptions = providedChannelOptions ?? fetchedChannelOptions;
   const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [giftVoucherNo, setGiftVoucherNo] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
@@ -133,13 +141,13 @@ export default function VoucherPaymentModal({
 
   /* Voucher types come from the transaction-channel-options endpoint. */
   useEffect(() => {
-    if (!open) return;
+    if (!open || providedChannelOptions) return;
 
     let cancelled = false;
 
     getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.voucher)
       .then((options) => {
-        if (!cancelled) setChannelOptions(options);
+        if (!cancelled) setFetchedChannelOptions(options);
       })
       .catch((error) => {
         console.error("Voucher channel options error:", error);
@@ -148,7 +156,7 @@ export default function VoucherPaymentModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, providedChannelOptions]);
 
   const selectedChannel = channelOptions.find(
     (option) => Number(option.value) === channelOptionId,
@@ -368,6 +376,11 @@ export default function VoucherPaymentModal({
                       {option.text}
                     </option>
                   ))}
+                  {channelOptions.length === 0 && (
+                    <option value={0} disabled>
+                      No payment types configured for this channel
+                    </option>
+                  )}
                 </select>
               </div>
 

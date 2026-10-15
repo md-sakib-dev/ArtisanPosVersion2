@@ -25,6 +25,8 @@ interface SlipPaymentModalProps {
   open: boolean;
   onClose: () => void;
   onSlipEntriesChange: (entries: ChannelPaymentEntry[]) => void;
+  /** Slip types from GET /api/TransactionChannels, loaded by the sale screen. */
+  channelOptions?: DropdownOption[];
 }
 
 // ======================================================
@@ -109,6 +111,7 @@ export default function SlipPaymentModal({
   open,
   onClose,
   onSlipEntriesChange,
+  channelOptions: providedChannelOptions,
 }: SlipPaymentModalProps) {
   // ====================================================
   // STATE
@@ -117,7 +120,12 @@ export default function SlipPaymentModal({
   const [entries, setEntries] = useState<SlipPaymentEntry[]>([]);
   const [creditSlipAmount, setCreditSlipAmount] = useState<number>(0);
   const [creditSlipNo, setCreditSlipNo] = useState<string>("");
-  const [channelOptions, setChannelOptions] = useState<DropdownOption[]>([]);
+  /* Options come from the parent; the local fetch below is only a fallback
+     for screens that do not load the channel list themselves. */
+  const [fetchedChannelOptions, setFetchedChannelOptions] = useState<
+    DropdownOption[]
+  >([]);
+  const channelOptions = providedChannelOptions ?? fetchedChannelOptions;
   const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
   const [nextId, setNextId] = useState(1);
@@ -129,13 +137,13 @@ export default function SlipPaymentModal({
 
   /* Slip types come from the transaction-channel-options endpoint. */
   useEffect(() => {
-    if (!open) return;
+    if (!open || providedChannelOptions) return;
 
     let cancelled = false;
 
     getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.slip)
       .then((options) => {
-        if (!cancelled) setChannelOptions(options);
+        if (!cancelled) setFetchedChannelOptions(options);
       })
       .catch((error) => {
         console.error("Slip channel options error:", error);
@@ -144,7 +152,7 @@ export default function SlipPaymentModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, providedChannelOptions]);
 
   /* Every field is mandatory before an entry can be added. */
   const isFormValid =
@@ -395,6 +403,11 @@ export default function SlipPaymentModal({
                       {option.text}
                     </option>
                   ))}
+                  {channelOptions.length === 0 && (
+                    <option value={0} disabled>
+                      No payment types configured for this channel
+                    </option>
+                  )}
                 </select>
               </div>
 
