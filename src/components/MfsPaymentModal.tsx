@@ -162,6 +162,15 @@ export default function MfsPaymentModal({
     };
   }, [open, providedChannelOptions]);
 
+  /* The "entry added" notice hides itself after 5 seconds. */
+  useEffect(() => {
+    if (saveNotice?.type !== "success") return;
+
+    const timer = window.setTimeout(() => setSaveNotice(null), 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
+
   const selectedChannel = channelOptions.find(
     (option) => Number(option.value) === channelOptionId,
   );
@@ -353,8 +362,8 @@ export default function MfsPaymentModal({
 
             {/* Form Grid - 12 column system */}
             <div className="grid grid-cols-12 gap-4">
-              {/* Payment Amount - 4 cols */}
-              <div className="col-span-4">
+              {/* Payment Amount - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Smartphone size={14} className="text-[#10673E]" />
                   Payment Amount
@@ -374,8 +383,8 @@ export default function MfsPaymentModal({
                 </div>
               </div>
 
-              {/* Mobile No (Last 4 Digit) - 4 cols */}
-              <div className="col-span-4">
+              {/* Mobile No (Last 4 Digit) - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Hash size={14} className="text-[#10673E]" />
                   Mobile No (Last 4 Digit)
@@ -390,8 +399,8 @@ export default function MfsPaymentModal({
                 />
               </div>
 
-              {/* Mobile Payment Type - 4 cols */}
-              <div className="col-span-4">
+              {/* Mobile Payment Type - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Smartphone size={14} className="text-[#10673E]" />
                   Mobile Payment Type
@@ -415,14 +424,14 @@ export default function MfsPaymentModal({
                 </select>
               </div>
 
-              {/* Add Payment Button - 4 cols, aligned to bottom */}
-              <div className="col-span-4 flex items-end">
+              {/* Add Payment Button - 3 cols, sits beside the last field */}
+              <div className="col-span-3 flex items-end">
                 <button
                   type="button"
                   onClick={handleAddPayment}
                   disabled={!isFormValid}
                   title={isFormValid ? undefined : "Fill every field to add"}
-                  className={`h-10 w-full rounded-lg bg-[#10673E] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] ${
+                  className={`h-10 w-full whitespace-nowrap rounded-lg bg-[#10673E] px-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#0D5A35] hover:shadow-md active:scale-[0.98] ${
                     isFormValid
                       ? ""
                       : "cursor-not-allowed opacity-50 hover:bg-[#10673E]"

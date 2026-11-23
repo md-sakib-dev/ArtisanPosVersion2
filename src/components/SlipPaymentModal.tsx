@@ -154,6 +154,15 @@ export default function SlipPaymentModal({
     };
   }, [open, providedChannelOptions]);
 
+  /* The "entry added" notice hides itself after 5 seconds. */
+  useEffect(() => {
+    if (saveNotice?.type !== "success") return;
+
+    const timer = window.setTimeout(() => setSaveNotice(null), 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
+
   /* Every field is mandatory before an entry can be added. */
   const isFormValid =
     creditSlipAmount > 0 &&
@@ -350,8 +359,8 @@ export default function SlipPaymentModal({
 
             {/* Form Grid - 12 column system */}
             <div className="grid grid-cols-12 gap-4">
-              {/* Credit Slip Amount - 4 cols */}
-              <div className="col-span-4">
+              {/* Credit Slip Amount - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <FileText size={14} className="text-[#10673E]" />
                   Credit Slip Amount
@@ -371,8 +380,8 @@ export default function SlipPaymentModal({
                 </div>
               </div>
 
-              {/* Credit Slip No - 4 cols */}
-              <div className="col-span-4">
+              {/* Credit Slip No - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Hash size={14} className="text-[#10673E]" />
                   Credit Slip No
@@ -386,8 +395,8 @@ export default function SlipPaymentModal({
                 />
               </div>
 
-              {/* Slip Type (channel option) - 4 cols */}
-              <div className="col-span-4">
+              {/* Slip Type (channel option) - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <FileText size={14} className="text-[#10673E]" />
                   Slip Type
@@ -411,14 +420,14 @@ export default function SlipPaymentModal({
                 </select>
               </div>
 
-              {/* Add Payment Button - 4 cols, aligned to bottom */}
-              <div className="col-span-4 flex items-end">
+              {/* Add Payment Button - 3 cols, sits beside the last field */}
+              <div className="col-span-3 flex items-end">
                 <button
                   type="button"
                   onClick={handleAddPayment}
                   disabled={!isFormValid}
                   title={isFormValid ? undefined : "Fill every field to add"}
-                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                  className={`h-10 w-full whitespace-nowrap rounded-lg bg-[#0E9351] px-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
                     isFormValid
                       ? ""
                       : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"

@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { X, User, Smartphone, Mail, MapPin, Percent, Send, KeyRound, CheckCircle } from "lucide-react";
+import { X, User, Smartphone, Mail, MapPin, Percent, Send, KeyRound, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import type { RegularSaleCustomer } from "../api/customerApi";
+import {
+  isDiscountCodeAccepted,
+  sendDiscountCode,
+  verifyDiscountCode,
+} from "../api/regularSaleApi";
 
 // ======================================================
 // TYPES
@@ -10,6 +15,8 @@ interface CustomerInfoModalProps {
   open: boolean;
   onClose: () => void;
   customer: RegularSaleCustomer | null;
+  /** Fired with the customer's percentage once the SMS code is verified. */
+  onDiscountApplied: (discountPercent: number) => void;
 }
 
 // ======================================================
@@ -20,6 +27,7 @@ export default function CustomerInfoModal({
   open,
   onClose,
   customer,
+  onDiscountApplied,
 }: CustomerInfoModalProps) {
   // ====================================================
   // STATE
@@ -28,7 +36,12 @@ export default function CustomerInfoModal({
   const [verifyCode, setVerifyCode] = useState<string>("");
   const [isCodeSent, setIsCodeSent] = useState<boolean>(false);
   const [isDiscountApplied, setIsDiscountApplied] = useState<boolean>(false);
-  const [toast, setToast] = useState<string>("");
+  const [isSendingCode, setIsSendingCode] = useState<boolean>(false);
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
   // ====================================================
   // FETCHED CUSTOMER DATA (from /RegularSales/customer/{phone})
@@ -38,29 +51,91 @@ export default function CustomerInfoModal({
   const mobileNumber = customer?.mobileNumber ?? "";
   const emailAddress = customer?.emailAddress ?? "";
   const presentAddress = customer?.presentAddress ?? "";
-  const discount =
-    customer?.discount != null ? `${customer.discount}%` : "-";
+
+  /* The percentage that gets handed to the sale once the code is verified. */
+  const discountPercent = Number(customer?.discount) || 0;
+  const discount = customer?.discount != null ? `${customer.discount}%` : "-";
 
   // ====================================================
   // HANDLERS
   // ====================================================
 
-  const handleRequestDiscount = () => {
-    setIsCodeSent(true);
-    setToast("Verification code sent to customer phone");
-    setTimeout(() => setToast(""), 3000);
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const handleApplyDiscount = () => {
-    if (!verifyCode || verifyCode.length < 4) {
-      setToast("Please enter a valid verification code");
-      setTimeout(() => setToast(""), 3000);
+  /* POST /api/RegularSales/discount/send-code — body { mobileNumber }. */
+  const handleRequestDiscount = async () => {
+    if (isSendingCode) return;
+
+    if (!mobileNumber.trim()) {
+      showToast("This customer has no mobile number on file.", "error");
       return;
     }
 
-    setIsDiscountApplied(true);
-    setToast("Discount applied successfully!");
-    setTimeout(() => setToast(""), 3000);
+    setIsSendingCode(true);
+
+    try {
+      const result = await sendDiscountCode(mobileNumber.trim());
+
+      if (!isDiscountCodeAccepted(result)) {
+        showToast(
+          result?.message || "Unable to send the verification code.",
+          "error"
+        );
+        return;
+      }
+
+      setIsCodeSent(true);
+      showToast(
+        result.message || "Verification code sent to customer phone",
+        "success"
+      );
+    } catch (error) {
+      console.error("Send discount code error:", error);
+      showToast("Unable to send the verification code.", "error");
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  /* POST /api/RegularSales/discount/verify-code — body { mobileNumber,
+     verificationCode }. On success the customer's percentage is pushed to
+     the sale and the modal closes. */
+  const handleApplyDiscount = async () => {
+    if (isVerifying) return;
+
+    if (!verifyCode || verifyCode.length < 4) {
+      showToast("Please enter a valid verification code", "error");
+      return;
+    }
+
+    setIsVerifying(true);
+
+    try {
+      const result = await verifyDiscountCode(
+        mobileNumber.trim(),
+        verifyCode.trim()
+      );
+
+      if (!isDiscountCodeAccepted(result)) {
+        showToast(
+          result?.message || "Invalid verification code.",
+          "error"
+        );
+        return;
+      }
+
+      setIsDiscountApplied(true);
+      onDiscountApplied(discountPercent);
+      onClose();
+    } catch (error) {
+      console.error("Verify discount code error:", error);
+      showToast("Unable to verify the code.", "error");
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleCodeChange = (value: string) => {
@@ -121,9 +196,19 @@ export default function CustomerInfoModal({
         <div className="p-6">
           {/* Toast Message */}
           {toast && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-600">
-              <CheckCircle size={16} />
-              {toast}
+            <div
+              className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+                toast.type === "error"
+                  ? "border-red-200 bg-red-50 text-red-600"
+                  : "border-green-200 bg-green-50 text-green-600"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <AlertTriangle size={16} />
+              ) : (
+                <CheckCircle size={16} />
+              )}
+              {toast.message}
             </div>
           )}
 
@@ -210,15 +295,23 @@ export default function CustomerInfoModal({
             <button
               type="button"
               onClick={handleRequestDiscount}
-              disabled={isCodeSent}
+              disabled={isCodeSent || isSendingCode}
               className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] ${
-                isCodeSent
+                isCodeSent || isSendingCode
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "bg-[#0E9351] text-white hover:bg-[#10673E] hover:shadow-md"
               }`}
             >
-              <Send size={14} />
-              {isCodeSent ? "Code Sent" : "Request Discount"}
+              {isSendingCode ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              {isSendingCode
+                ? "Sending..."
+                : isCodeSent
+                  ? "Code Sent"
+                  : "Request Discount"}
             </button>
             {isCodeSent && (
               <p className="mt-2 text-xs text-[#66736B]">
@@ -247,13 +340,14 @@ export default function CustomerInfoModal({
             <button
               type="button"
               onClick={handleApplyDiscount}
-              disabled={!isCodeSent || isDiscountApplied}
-              className={`h-10 rounded-lg px-5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] ${
-                !isCodeSent || isDiscountApplied
+              disabled={!isCodeSent || isDiscountApplied || isVerifying}
+              className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold shadow-sm transition-all active:scale-[0.98] ${
+                !isCodeSent || isDiscountApplied || isVerifying
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                   : "bg-[#0E9351] text-white hover:bg-[#10673E] hover:shadow-md"
               }`}
             >
+              {isVerifying && <Loader2 size={14} className="animate-spin" />}
               {isDiscountApplied ? "Applied" : "Apply Discount"}
             </button>
           </div>
