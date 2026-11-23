@@ -419,3 +419,43 @@ export const getPausedInvoiceDetails = async (
   );
   return normalizePausedInvoiceDetails(response.data);
 };
+
+/* ------------------------------------------------------------------ */
+/* RegularSales/discount — SMS code that unlocks a customer discount    */
+/* ------------------------------------------------------------------ */
+
+export interface DiscountCodeResponse {
+  success: boolean;
+  message: string;
+  /** true once the code was sent / accepted. */
+  data: boolean | null;
+  pagination: unknown;
+}
+
+/** POST /api/RegularSales/discount/send-code — body: { mobileNumber }. */
+export const sendDiscountCode = async (
+  mobileNumber: string
+): Promise<DiscountCodeResponse> => {
+  const response = await api.post<DiscountCodeResponse>(
+    "RegularSales/discount/send-code",
+    { mobileNumber }
+  );
+  return response.data;
+};
+
+/** POST /api/RegularSales/discount/verify-code — body: { mobileNumber, verificationCode }. */
+export const verifyDiscountCode = async (
+  mobileNumber: string,
+  verificationCode: string
+): Promise<DiscountCodeResponse> => {
+  const response = await api.post<DiscountCodeResponse>(
+    "RegularSales/discount/verify-code",
+    { mobileNumber, verificationCode }
+  );
+  return response.data;
+};
+
+/** Both endpoints answer with `data: true` when the step succeeded. */
+export const isDiscountCodeAccepted = (
+  response: DiscountCodeResponse | null | undefined
+): boolean => response?.success !== false && response?.data === true;

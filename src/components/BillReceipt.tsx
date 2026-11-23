@@ -13,6 +13,8 @@ interface BillReceiptProps {
   storeInfo: BillStoreInfo;
   /** Fire window.print() once the sheet is mounted. */
   autoPrint?: boolean;
+  /** Also print a second, identical bill with every amount left blank. */
+  giftCopy?: boolean;
   /** Called after the print dialog closes so the caller can unmount. */
   onClose?: () => void;
 }
@@ -95,6 +97,14 @@ const PRINT_STYLES = `
     border-color: #000 !important;
   }
 
+  /* Gift copy goes on its own page. */
+  #bill-print-root .bill-page-break {
+    display: block !important;
+    page-break-after: always;
+    break-after: page;
+    height: 0;
+  }
+
   @page {
     margin: 5mm;
   }
@@ -109,10 +119,13 @@ function SummaryRow({
   label,
   value,
   strong = false,
+  hideValue = false,
 }: {
   label: string;
   value: number;
   strong?: boolean;
+  /* Gift copy: the label stays, the amount is left blank. */
+  hideValue?: boolean;
 }) {
   return (
     <div
@@ -121,7 +134,7 @@ function SummaryRow({
       }`}
     >
       <span>{label}</span>
-      <span className="tabular-nums">{money(value)}</span>
+      <span className="tabular-nums">{hideValue ? "" : money(value)}</span>
     </div>
   );
 }
@@ -136,6 +149,7 @@ export default function BillReceipt({
   cashierName,
   storeInfo,
   autoPrint = false,
+  giftCopy = false,
   onClose,
 }: BillReceiptProps) {
   /* Auto-print once the sheet has painted. */
@@ -175,9 +189,9 @@ export default function BillReceipt({
 
   const invoiceBy = cashierName || saleData.invoiceBy || "";
 
-  const sheet = (
-    <div id="bill-print-root">
-      <div className="bill-sheet bg-white px-3 py-4 text-[12px] leading-snug text-black">
+  /* hideAmounts blanks every money column — used for the gift copy. */
+  const buildSheet = (hideAmounts: boolean) => (
+    <div className="bill-sheet bg-white px-3 py-4 text-[12px] leading-snug text-black">
         {/* ============================================= */}
         {/* 1. HEADER                                      */}
         {/* ============================================= */}
@@ -245,16 +259,16 @@ export default function BillReceipt({
                   </span>
                 </td>
                 <td className="px-1 py-1 text-right align-top tabular-nums">
-                  {money(item.vatPercent)}
+                  {hideAmounts ? "" : money(item.vatPercent)}
                 </td>
                 <td className="px-1 py-1 text-right align-top tabular-nums">
                   {item.qty}
                 </td>
                 <td className="px-1 py-1 text-right align-top tabular-nums">
-                  {money(item.unitPrice)}
+                  {hideAmounts ? "" : money(item.unitPrice)}
                 </td>
                 <td className="py-1 pl-1 text-right align-top tabular-nums">
-                  {money(item.total)}
+                  {hideAmounts ? "" : money(item.total)}
                 </td>
               </tr>
             ))}
@@ -284,39 +298,73 @@ export default function BillReceipt({
           <SummaryRow
             label="Total Product Price:"
             value={saleData.totalProductPrice}
+            hideValue={hideAmounts}
           />
           <SummaryRow
             label="Discount Percent:"
             value={saleData.discountPercent}
+            hideValue={hideAmounts}
           />
           <SummaryRow
             label="Discount Amount:"
             value={saleData.discountAmount}
+            hideValue={hideAmounts}
           />
-          <SummaryRow label="Adjustment:" value={saleData.adjustmentAmount} />
-          <SummaryRow label="Sub Total:" value={saleData.subTotal} />
+          <SummaryRow
+            label="Adjustment:"
+            value={saleData.adjustmentAmount}
+            hideValue={hideAmounts}
+          />
+          <SummaryRow
+            label="Sub Total:"
+            value={saleData.subTotal}
+            hideValue={hideAmounts}
+          />
           <SummaryRow
             label="Exchanged Product Amount:"
             value={saleData.exchangedProductAmount}
+            hideValue={hideAmounts}
           />
-          <SummaryRow label="VAT:" value={saleData.vatAmount} />
+          <SummaryRow
+            label="VAT:"
+            value={saleData.vatAmount}
+            hideValue={hideAmounts}
+          />
 
           <div className="bill-hr my-1 border-t border-black" />
           <SummaryRow
             label="Total Payable:"
             value={saleData.totalPayable}
             strong
+            hideValue={hideAmounts}
           />
           <div className="bill-hr mb-1 border-t border-black" />
 
-          <SummaryRow label="Cash Amount:" value={saleData.cashAmount} />
-          <SummaryRow label="Card Amount:" value={saleData.cardAmount} />
+          <SummaryRow
+            label="Cash Amount:"
+            value={saleData.cashAmount}
+            hideValue={hideAmounts}
+          />
+          <SummaryRow
+            label="Card Amount:"
+            value={saleData.cardAmount}
+            hideValue={hideAmounts}
+          />
           <SummaryRow
             label="Mobile Payment Amount:"
             value={saleData.mfsAmount}
+            hideValue={hideAmounts}
           />
-          <SummaryRow label="Credit Slip Amount:" value={saleData.slipAmount} />
-          <SummaryRow label="Voucher Amount:" value={saleData.voucherAmount} />
+          <SummaryRow
+            label="Credit Slip Amount:"
+            value={saleData.slipAmount}
+            hideValue={hideAmounts}
+          />
+          <SummaryRow
+            label="Voucher Amount:"
+            value={saleData.voucherAmount}
+            hideValue={hideAmounts}
+          />
 
           <div className="bill-hr my-1 border-t border-black" />
 
@@ -324,8 +372,14 @@ export default function BillReceipt({
             label="Total Received:"
             value={saleData.totalReceived}
             strong
+            hideValue={hideAmounts}
           />
-          <SummaryRow label="Change:" value={saleData.changeAmount} strong />
+          <SummaryRow
+            label="Change:"
+            value={saleData.changeAmount}
+            strong
+            hideValue={hideAmounts}
+          />
 
           <div className="flex items-baseline justify-between gap-2">
             <span>Payment Mode:</span>
@@ -360,10 +414,22 @@ export default function BillReceipt({
           Software by White Services Technology. www.white.services
         </p>
       </div>
+  );
+
+  const bill = (
+    <div id="bill-print-root">
+      {buildSheet(false)}
+
+      {giftCopy && (
+        <>
+          <div className="bill-page-break" />
+          {buildSheet(true)}
+        </>
+      )}
 
       <style>{PRINT_STYLES}</style>
     </div>
   );
 
-  return createPortal(sheet, document.body);
+  return createPortal(bill, document.body);
 }

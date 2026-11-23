@@ -19,9 +19,7 @@ interface CardPaymentEntry {
   /** POS machine = channel-4 option: its id plus the option name shown. */
   posMachineId: number;
   posMachine: string;
-  cardType: string;
   cardNumberLast4: string;
-  channelOptionId: number;
 }
 
 interface CardPaymentModalProps {
@@ -29,11 +27,9 @@ interface CardPaymentModalProps {
   onClose: () => void;
   onCardEntriesChange: (entries: ChannelPaymentEntry[]) => void;
   /**
-   * Card types (channel 3) and POS machines (channel 4), both from
-   * GET /api/TransactionChannelOptions loaded once by the sale screen.
-   * value = channelOptionId, text = optionName.
+   * POS machines (channel 4) from GET /api/TransactionChannelOptions loaded
+   * once by the sale screen. value = channelOptionId, text = optionName.
    */
-  channelOptions?: DropdownOption[];
   posMachineOptions?: DropdownOption[];
 }
 
@@ -180,7 +176,6 @@ export default function CardPaymentModal({
   open,
   onClose,
   onCardEntriesChange,
-  channelOptions: providedChannelOptions,
   posMachineOptions: providedPosMachineOptions,
 }: CardPaymentModalProps) {
   // ====================================================
@@ -189,18 +184,13 @@ export default function CardPaymentModal({
 
   const [entries, setEntries] = useState<CardPaymentEntry[]>([]);
   const [cardPayment, setCardPayment] = useState<number>(0);
-  /* Options come from the parent; the local fetches below are only a
-     fallback for screens that do not load the option list themselves. */
-  const [fetchedChannelOptions, setFetchedChannelOptions] = useState<
-    DropdownOption[]
-  >([]);
+  /* Options come from the parent; the local fetch below is only a fallback
+     for screens that do not load the option list themselves. */
   const [fetchedPosMachineOptions, setFetchedPosMachineOptions] = useState<
     DropdownOption[]
   >([]);
-  const channelOptions = providedChannelOptions ?? fetchedChannelOptions;
   const posMachineOptions =
     providedPosMachineOptions ?? fetchedPosMachineOptions;
-  const [channelOptionId, setChannelOptionId] = useState<number>(0);
   const [posMachineId, setPosMachineId] = useState<number>(0);
   const [cardNumberLast4, setCardNumberLast4] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
@@ -211,42 +201,35 @@ export default function CardPaymentModal({
     text: string;
   } | null>(null);
 
-  /* Card types (channel 3) and POS machines (channel 4); only used when the
-     parent did not hand the option lists down. */
+  /* POS machines (channel 4); only used when the parent did not hand the
+     option list down. */
   useEffect(() => {
     if (!open) return;
-    if (providedChannelOptions && providedPosMachineOptions) return;
+    if (providedPosMachineOptions) return;
 
     let cancelled = false;
 
-    if (!providedChannelOptions) {
-      getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.card)
-        .then((options) => {
-          if (!cancelled) setFetchedChannelOptions(options);
-        })
-        .catch((error) => {
-          console.error("Card channel options error:", error);
-        });
-    }
-
-    if (!providedPosMachineOptions) {
-      getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.posMachine)
-        .then((options) => {
-          if (!cancelled) setFetchedPosMachineOptions(options);
-        })
-        .catch((error) => {
-          console.error("POS machine options error:", error);
-        });
-    }
+    getTransactionChannelOptionsByChannel(PAYMENT_CHANNEL_IDS.posMachine)
+      .then((options) => {
+        if (!cancelled) setFetchedPosMachineOptions(options);
+      })
+      .catch((error) => {
+        console.error("POS machine options error:", error);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [open, providedChannelOptions, providedPosMachineOptions]);
+  }, [open, providedPosMachineOptions]);
 
-  const selectedChannel = channelOptions.find(
-    (option) => Number(option.value) === channelOptionId,
-  );
+  /* The "entry added" notice hides itself after 5 seconds. */
+  useEffect(() => {
+    if (saveNotice?.type !== "success") return;
+
+    const timer = window.setTimeout(() => setSaveNotice(null), 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
 
   const selectedPosMachine = posMachineOptions.find(
     (option) => Number(option.value) === posMachineId,
@@ -254,17 +237,15 @@ export default function CardPaymentModal({
 
   /* Every field is mandatory before an entry can be added. */
   const isFormValid =
-    cardPayment > 0 &&
-    posMachineId > 0 &&
-    channelOptionId > 0 &&
-    cardNumberLast4.length === 4;
+    cardPayment > 0 && posMachineId > 0 && cardNumberLast4.length === 4;
 
-  /* Parent needs the amount, the card-type channel option and (so the sale
-     can post a channel-4 row) the POS machine option. */
+  /* The parent needs the amount and the POS machine option so the sale can
+     post its channel-4 row. No card type is captured here, so no channel
+     option travels with the summary. */
   const toSummaries = (list: CardPaymentEntry[]): ChannelPaymentEntry[] =>
     list.map((entry) => ({
       amount: entry.cardPayment,
-      channelOptionId: entry.channelOptionId,
+      channelOptionId: 0,
       posMachineId: entry.posMachineId,
     }));
 
@@ -288,12 +269,6 @@ export default function CardPaymentModal({
       return;
     }
 
-    if (channelOptionId <= 0) {
-      setValidationError("Please select a Card Type");
-      setSaveNotice({ type: "error", text: "Please select a Card Type" });
-      return;
-    }
-
     if (!cardNumberLast4 || cardNumberLast4.length !== 4) {
       setValidationError("Please enter last 4 digits of card number");
       setSaveNotice({
@@ -308,10 +283,7 @@ export default function CardPaymentModal({
       cardPayment,
       posMachineId,
       posMachine: selectedPosMachine?.text ?? "",
-      /* The selected channel option is the card type. */
-      cardType: selectedChannel?.text ?? "",
       cardNumberLast4,
-      channelOptionId,
     };
 
     const updatedEntries = [...entries, newEntry];
@@ -320,7 +292,6 @@ export default function CardPaymentModal({
     setNextId(nextId + 1);
 
     setCardPayment(0);
-    setChannelOptionId(0);
     setPosMachineId(0);
     setCardNumberLast4("");
 
@@ -338,7 +309,6 @@ export default function CardPaymentModal({
     if (entries.length === 0) {
       // No entries, just reset form
       setCardPayment(0);
-      setChannelOptionId(0);
       setPosMachineId(0);
       setCardNumberLast4("");
       setValidationError("");
@@ -352,7 +322,6 @@ export default function CardPaymentModal({
   const handleConfirmClear = () => {
     setEntries([]);
     setCardPayment(0);
-    setChannelOptionId(0);
     setPosMachineId(0);
     setCardNumberLast4("");
     setValidationError("");
@@ -449,10 +418,10 @@ export default function CardPaymentModal({
               </div>
             )}
 
-            {/* Form Grid - 12 column system, each field 4 cols */}
+            {/* Form Grid - 12 column system, each field 3 cols */}
             <div className="grid grid-cols-12 gap-4">
-              {/* Card Payment Amount - 4 cols */}
-              <div className="col-span-4">
+              {/* Card Payment Amount - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <CreditCard size={14} className="text-[#10673E]" />
                   Card Payment
@@ -472,8 +441,8 @@ export default function CardPaymentModal({
                 </div>
               </div>
 
-              {/* POS Machine - 4 cols */}
-              <div className="col-span-4">
+              {/* POS Machine - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Monitor size={14} className="text-[#10673E]" />
                   POS Machine
@@ -497,36 +466,11 @@ export default function CardPaymentModal({
                 </select>
               </div>
 
-              {/* Card Type - 4 cols */}
-              <div className="col-span-4">
+              {/* Card Number (Last 4 Digit) - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <CreditCard size={14} className="text-[#10673E]" />
-                  Card Type
-                </label>
-                <select
-                  value={channelOptionId}
-                  onChange={(e) => setChannelOptionId(Number(e.target.value))}
-                  className={selectClass}
-                >
-                  <option value={0}>Select Card Type</option>
-                  {channelOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.text}
-                    </option>
-                  ))}
-                  {channelOptions.length === 0 && (
-                    <option value={0} disabled>
-                      No payment types configured for this channel
-                    </option>
-                  )}
-                </select>
-              </div>
-
-              {/* Card Number (Last 4 Digit) - 4 cols */}
-              <div className="col-span-4">
-                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
-                  <CreditCard size={14} className="text-[#10673E]" />
-                  Card Number (Last 4 Digit)
+                  Card Number ( 4 Digit)
                 </label>
                 <input
                   type="text"
@@ -538,14 +482,14 @@ export default function CardPaymentModal({
                 />
               </div>
 
-              {/* Add Payment Button - 4 cols, aligned to bottom */}
-              <div className="col-span-4 flex items-end">
+              {/* Add Payment Button — sits beside Card Number, aligned with the inputs */}
+              <div className="col-span-3 flex items-end">
                 <button
                   type="button"
                   onClick={handleAddPayment}
                   disabled={!isFormValid}
                   title={isFormValid ? undefined : "Fill every field to add"}
-                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                  className={`h-10 w-full whitespace-nowrap rounded-lg bg-[#0E9351] px-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
                     isFormValid
                       ? ""
                       : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"
@@ -563,7 +507,7 @@ export default function CardPaymentModal({
           {/* ================================================= */}
 
           <div className="border-t border-[#E6EAE3] bg-[#FAFBF9]">
-            <div className="px-6 py-3">
+            {/* <div className="px-6 py-3">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                 <CreditCard size={14} className="text-[#10673E]" />
                 Payment Entries
@@ -573,7 +517,7 @@ export default function CardPaymentModal({
                   </span>
                 )}
               </h3>
-            </div>
+            </div> */}
 
             <div className="max-h-48 overflow-y-auto px-6 pb-4">
               {entries.length === 0 ? (
@@ -589,16 +533,13 @@ export default function CardPaymentModal({
                   <thead>
                     <tr className="border-b border-[#E6EAE3]">
                       <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-[#8A938B]">
-                        Card Payment
-                      </th>
-                      <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-[#8A938B]">
                         POS Machine
                       </th>
                       <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-[#8A938B]">
-                        Card Type
+                        Card Number (Last 4 Digit)
                       </th>
                       <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-[#8A938B]">
-                        Card Number (Last 4 Digit)
+                        Card Payment
                       </th>
                       <th className="pb-3 text-center text-xs font-semibold uppercase tracking-wide text-[#8A938B]">
                         Action
@@ -611,13 +552,12 @@ export default function CardPaymentModal({
                         key={entry.id}
                         className="border-b border-[#E6EAE3] transition-colors hover:bg-[#F1F8F3]"
                       >
-                        <td className="py-3 font-semibold text-[#10673E]">
-                          ৳{entry.cardPayment.toLocaleString("en-IN")}
-                        </td>
                         <td className="py-3 text-[#17231D]">{entry.posMachine}</td>
-                        <td className="py-3 text-[#17231D]">{entry.cardType}</td>
                         <td className="py-3 font-mono tracking-wider text-[#17231D]">
                           **** {entry.cardNumberLast4}
+                        </td>
+                        <td className="py-3 font-semibold text-[#10673E]">
+                          {entry.cardPayment.toLocaleString("en-IN")}
                         </td>
                         <td className="py-3 text-center">
                           <button
@@ -631,25 +571,6 @@ export default function CardPaymentModal({
                       </tr>
                     ))}
                   </tbody>
-                  {entries.length > 0 && (
-                    <tfoot>
-                      <tr className="bg-[#F1F8F3] font-semibold">
-                        <td className="rounded-b-lg py-3 pl-0 text-sm text-[#66736B]">
-                          Total Card Payment:
-                        </td>
-                        <td
-                          colSpan={3}
-                          className="rounded-b-lg py-3 text-right text-lg font-bold text-[#10673E]"
-                        >
-                          ৳
-                          {entries
-                            .reduce((sum, e) => sum + e.cardPayment, 0)
-                            .toLocaleString("en-IN")}
-                        </td>
-                        <td className="rounded-b-lg" />
-                      </tr>
-                    </tfoot>
-                  )}
                 </table>
               )}
             </div>
@@ -668,7 +589,6 @@ export default function CardPaymentModal({
               <span className="mx-2">|</span>
               <span className="font-medium">Total Amount:</span>{" "}
               <span className="font-bold text-[#10673E]">
-                ৳
                 {entries
                   .reduce((sum, e) => sum + e.cardPayment, 0)
                   .toLocaleString("en-IN")}

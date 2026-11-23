@@ -21,12 +21,14 @@ import {
   Trash2,
   Maximize2,
   Minimize2,
+  Loader2,
+  RefreshCw,
   X,
   ShoppingCart,
   UserRound,
 } from "lucide-react";
 import logo from "../../assets/logo.png"
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {getProductByBarcode} from "../../api/productApi";
 import { Link } from "react-router-dom";
 import type { MasterProduct } from "../../types/product";
@@ -35,6 +37,7 @@ import MfsPaymentModal from "../../components/MfsPaymentModal";
 import SlipPaymentModal from "../../components/SlipPaymentModal";
 import VoucherPaymentModal from "../../components/VoucherPaymentModal";
 import CustomerInfoModal from "../../components/CustomerInfoModal";
+import ExchangeModal from "../../components/ExchangeModal";
 import ResumeInvoiceModal from "../../components/ResumeInvoiceModal";
 import BillReceipt from "../../components/BillReceipt";
 import {
@@ -61,7 +64,13 @@ import {
   type PausedSalePayload,
   type PausedInvoiceDetailDto,
   type PausedInvoiceListItemDto,
+  type TempSalesItemDto,
 } from "../../api/regularSaleApi";
+import {
+  extractDiscountList,
+  getDiscounts,
+  type DiscountRecord,
+} from "../../api/discountApi";
 import { classifyApiError } from "../../api/apiError";
 import {
   getTransactionChannelOptions,
@@ -124,22 +133,22 @@ const smallInputClass = `
   focus:ring-2
   focus:ring-[#0E9351]/15
 `;
-const smallAdjnputClass = `
-  h-8
-  w-32
-  rounded-md
-  border
-  border-[#DDE5DF]
-  bg-white
-  px-2.5
-  text-sm
-  text-[#17231D]
-  outline-none
-  transition
-  focus:border-[#0E9351]
-  focus:ring-2
-  focus:ring-[#0E9351]/15
-`;
+// const smallAdjnputClass = `
+//   h-8
+//   w-32
+//   rounded-md
+//   border
+//   border-[#DDE5DF]
+//   bg-white
+//   px-2.5
+//   text-sm
+//   text-[#17231D]
+//   outline-none
+//   transition
+//   focus:border-[#0E9351]
+//   focus:ring-2
+//   focus:ring-[#0E9351]/15
+// `;
 
 const secondaryButtonClass = `
   inline-flex
@@ -381,6 +390,136 @@ const buildFallbackInvoiceNo = (
   return `${branchId}${String(counterId).padStart(2, "0")}${stamp}`;
 };
 
+/* Cash is held as typed text so the field is never rewritten mid-entry.
+   Only digits and a single decimal point are accepted. */
+const sanitizeCashInput = (value: string): string => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+
+  if (firstDot === -1) {
+    return cleaned;
+  }
+
+  return (
+    cleaned.slice(0, firstDot + 1) +
+    cleaned.slice(firstDot + 1).replace(/\./g, "")
+  );
+};
+
+// ======================================================
+// DISCOUNT / TEMP-SALE HELPERS
+// ======================================================
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/* A discount from GET /api/Discounts applies only while it is active and
+   today falls inside its start/end window. */
+const isDiscountUsableNow = (record: DiscountRecord): boolean => {
+  if (record.activeSts !== 1) {
+    return false;
+  }
+
+  const now = Date.now();
+  const start = record.startDate ? new Date(record.startDate).getTime() : NaN;
+
+  if (!Number.isNaN(start) && start > now) {
+    return false;
+  }
+
+  const end = record.endDate ? new Date(record.endDate).getTime() : NaN;
+
+  if (!Number.isNaN(end) && end < now) {
+    return false;
+  }
+
+  return true;
+};
+
+/* Label shown in the Discount select: name plus the value it carries. */
+const formatDiscountOption = (record: DiscountRecord): string => {
+  const label =
+    record.discountName ||
+    record.discountCode ||
+    "Discount " + record.discountId;
+
+  const value =
+    String(record.discountType ?? "").toUpperCase() === "FIXED"
+      ? "BDT " + record.discountValue
+      : record.discountValue + "%";
+
+  return label + " (" + value + ")";
+};
+
+/* Amount taken off the basket: a discount picked from the API wins over the
+   customer's verified percentage. minimumSaleAmount gates the discount and
+   maximumDiscountAmount (0 = no cap) limits it. */
+const computeDiscountAmount = (
+  baseAmount: number,
+  customerPercent: number,
+  record: DiscountRecord | null,
+): number => {
+  if (baseAmount <= 0) {
+    return 0;
+  }
+
+  if (!record) {
+    return round2((baseAmount * (Number(customerPercent) || 0)) / 100);
+  }
+
+  if (baseAmount < (Number(record.minimumSaleAmount) || 0)) {
+    return 0;
+  }
+
+  const cap =
+    Number(record.maximumDiscountAmount) > 0
+      ? Number(record.maximumDiscountAmount)
+      : Number.POSITIVE_INFINITY;
+
+  const raw =
+    String(record.discountType ?? "").toUpperCase() === "FIXED"
+      ? Number(record.discountValue) || 0
+      : (baseAmount * (Number(record.discountValue) || 0)) / 100;
+
+  return round2(Math.max(0, Math.min(raw, cap, baseAmount)));
+};
+
+/* The temp table stores one row per scan, so the same product can arrive more
+   than once. The till keeps a single line per product with a summed qty. */
+const mergeTempSaleRows = (rows: TempSalesItemDto[]): CartProduct[] => {
+  const merged = new Map<string, CartProduct>();
+
+  rows.forEach((row) => {
+    const key = row.productId > 0 ? String(row.productId) : row.barcode;
+    const existing = merged.get(key);
+
+    if (existing) {
+      existing.qty += Number(row.qty) || 0;
+      return;
+    }
+
+    merged.set(key, {
+      id: row.productId,
+      barcode: row.barcode,
+      prodName: row.fullName || row.shortName,
+      group: "",
+      type: "",
+      category: null,
+      style: null,
+      brandName: "",
+      size: "",
+      color: null,
+      unitPrice: row.salesPrice,
+      disc: 0,
+      vat: row.vatPercent,
+      productDescription: "",
+      qty: Number(row.qty) || 0,
+      spCode: "",
+    });
+  });
+
+  return [...merged.values()];
+};
+
 // ======================================================
 // SALE ENTRY
 // ======================================================
@@ -393,6 +532,11 @@ function SaleEntry() {
   const myBranchId = user?.branchId ?? 0;
   const counterId = user?.counterId ?? 0;
   const [barcodeInput, setBarcodeInput] = useState("");
+
+  /* Focus targets for the POS keyboard shortcuts (F2 / F4 / F7 / F8 / F9). */
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const cashInputRef = useRef<HTMLInputElement>(null);
 
   const [spCodeInput, setSpCodeInput] = useState("");
 
@@ -412,7 +556,21 @@ function SaleEntry() {
 
   const [invoiceDiscount, setInvoiceDiscount] = useState<number>(0);
 
+  /* Invoice discount picked from GET /api/Discounts (0 = none). */
+  const [selectedDiscountId, setSelectedDiscountId] = useState<number>(0);
+  const [discounts, setDiscounts] = useState<DiscountRecord[]>([]);
+  /* The dropdown starts in its loading state: it fetches on mount. */
+  const [isDiscountsLoading, setIsDiscountsLoading] = useState(true);
+  const [discountsError, setDiscountsError] = useState<string | null>(null);
+
   const [adjustment, setAdjustment] = useState<number>(0);
+  const [excAmount, setExcAmount] = useState<number>(0);
+  /* VAT of the exchanged return, taken off the sale's VAT. */
+  const [excVatAmount, setExcVatAmount] = useState<number>(0);
+  const [isExchangeOpen, setIsExchangeOpen] = useState(false);
+  /* Bumped when the till is cleared so the Exchange modal drops the return it
+     had loaded for the finished sale. */
+  const [exchangeResetKey, setExchangeResetKey] = useState(0);
 
   // ====================================================
   // CART
@@ -424,8 +582,15 @@ function SaleEntry() {
   // PAYMENTS
   // ====================================================
 
+  /* Cash is typed into a buffer first — the totals only pick it up once the
+     cashier presses Enter (or leaves the field). */
+  const [cashInput, setCashInput] = useState<string>("");
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [refundType, setRefundType] = useState<string>("Cash");
+
+  /* Gift sale: the bill is printed twice — the normal copy plus one with
+     every amount left blank. */
+  const [isGiftBill, setIsGiftBill] = useState(false);
 
   const [isCardPaymentModalOpen, setIsCardPaymentModalOpen] = useState(false);
 
@@ -469,6 +634,15 @@ function SaleEntry() {
   /* Set when the temp-sale sync of a scanned line failed. */
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
+  /* Temp table restore: visible while fetching and when it fails, so a slow
+     or broken load never leaves the cashier staring at a blank till. */
+  const [isTempLoading, setIsTempLoading] = useState(false);
+  const [tempLoadError, setTempLoadError] = useState<string | null>(null);
+  const tempLoadAttemptRef = useRef(0);
+  /* Set once the cashier starts a sale on this till — a late temp response
+     must not overwrite what they have already scanned. */
+  const cartTouchedRef = useRef(false);
+
   /* Inline success/error notice shown beside the Save button. */
   const [saveNotice, setSaveNotice] = useState<{
     type: "success" | "error";
@@ -486,6 +660,7 @@ function SaleEntry() {
   const [billData, setBillData] = useState<{
     sale: BillSaleData;
     items: BillItem[];
+    giftCopy: boolean;
   } | null>(null);
 
   /* CS No — reference number used when the change is paid by slip. */
@@ -638,6 +813,9 @@ const handleAddProduct = async () => {
       );
     }
 
+    /* From here on the cart belongs to the cashier, not to the restore. */
+    cartTouchedRef.current = true;
+
     setProducts((previousProducts) => {
       const existingIndex = previousProducts.findIndex(
         (product) => product.barcode === foundProduct.barcode,
@@ -671,6 +849,8 @@ const handleAddProduct = async () => {
     setSpCodeInput("");
     setQtyInput(1);
 
+    /* Ready for the next scan. */
+    barcodeInputRef.current?.focus();
   } catch (error) {
     console.error("Error fetching product:", error);
     alert("Unable to retrieve product");
@@ -763,9 +943,21 @@ const handleAddProduct = async () => {
 
   const productTotal = grossTotal - productDiscount;
 
+  /* Discount picked from GET /api/Discounts (null = none picked). */
+  const selectedDiscount =
+    discounts.find((record) => record.discountId === selectedDiscountId) ??
+    null;
+
   const invoiceDiscountAmount = hasProductDiscount
     ? 0
-    : (productTotal * invoiceDiscount) / 100;
+    : computeDiscountAmount(productTotal, invoiceDiscount, selectedDiscount);
+
+  /* The sale POST carries a percentage, so a fixed-amount discount is sent
+     as the percentage it works out to on this basket. */
+  const invoiceDiscountPercent =
+    selectedDiscount && productTotal > 0
+      ? round2((invoiceDiscountAmount / productTotal) * 100)
+      : invoiceDiscount;
 
   const totalVat = products.reduce((total, product) => {
     const discountedPrice =
@@ -774,9 +966,19 @@ const handleAddProduct = async () => {
     return total + (discountedPrice * product.qty * product.vat) / 100;
   }, 0);
 
+  /* The exchanged return's VAT comes off the sale's VAT. A return that
+     carries more VAT than the sale charges floors the VAT at 0 — it is
+     neither shown nor saved as a negative. */
+  const netTotalVat = Math.max(0, round2(totalVat - excVatAmount));
+
   const netPayableBeforeVat = productTotal - invoiceDiscountAmount;
 
-  const netPayable = netPayableBeforeVat + totalVat;
+  /* Exchange returns are credited against this sale, so the return amount
+     and its VAT come off the payable total. This is deliberately not clamped
+     at zero: when the credited return is worth more than the goods being
+     taken, the payable goes negative and that excess surfaces as Change owed
+     back to the customer. */
+  const netPayable = netPayableBeforeVat + netTotalVat - Number(excAmount);
 
   const totalQty = products.reduce((total, product) => total + product.qty, 0);
 
@@ -805,7 +1007,9 @@ const handleAddProduct = async () => {
     Number(voucherTotal) +
     Number(walletAmount);
 
-  /* Change and due are clamped at zero — neither can go negative. */
+  /* Due is clamped at zero, but change is not: a negative payable (the
+     exchange credit outweighs the sale) makes the whole excess fall out as
+     change, on top of whatever the customer handed over. */
   const change =
     totalReceived > netPayable
       ? Math.max(0, totalReceived - netPayable - Number(adjustment))
@@ -815,6 +1019,55 @@ const handleAddProduct = async () => {
     totalReceived < netPayable
       ? Math.max(0, netPayable - totalReceived - Number(adjustment))
       : 0;
+
+  // ====================================================
+  // EXCHANGE
+  // ====================================================
+
+  const r2Value = (value: number) => Math.round(value * 100) / 100;
+
+  // ====================================================
+  // CASH
+  // ====================================================
+
+  /* True while the typed cash has not been applied to the totals yet. */
+  const isCashPending = (Number(cashInput) || 0) !== cashReceived;
+
+  /* Enter / leaving the field applies the typed amount to Total Received,
+     Due and Change. */
+  const commitCash = () => {
+    const value = r2Value(Number(cashInput) || 0);
+
+    setCashReceived(value);
+    setCashInput(value === 0 ? "" : String(value));
+  };
+
+  /* Exchange modal → the loaded return's amount (product price after
+     discount) is credited into Exc. Amt, and its VAT is credited against the
+     sale's VAT. Both replace any earlier exchange rather than stacking. */
+  const handleExchange = (returnAmount: number, vatAmount: number) => {
+    const credit = Math.max(0, Number(returnAmount) || 0);
+    const vatCredit = Math.max(0, Number(vatAmount) || 0);
+
+    setExcAmount(r2Value(credit));
+    setExcVatAmount(r2Value(vatCredit));
+    setIsExchangeOpen(false);
+  };
+
+  /* Cancelling the loaded return in the modal also drops its credit — the
+     read-only Exc. Amt has no other way back to zero. */
+  const handleCancelExchange = () => {
+    setExcAmount(0);
+    setExcVatAmount(0);
+  };
+
+  /* Customer Info modal → the customer's discount percentage, applied to the
+     sale once the SMS verification code is accepted. */
+  const handleCustomerDiscountApplied = (discountPercent: number) => {
+    /* The customer's verified percentage replaces any picked discount. */
+    setSelectedDiscountId(0);
+    setInvoiceDiscount(Number(discountPercent) || 0);
+  };
 
   // ====================================================
   // SAVE SALE (POST /api/RegularSales)
@@ -895,14 +1148,12 @@ const handleAddProduct = async () => {
 
     addPayment(PAYMENT_CHANNEL_IDS.cash, Number(cashReceived));
 
-    /* A card payment sends two rows: the channel-3 row records which card
-       type was used (amount 0) and the channel-4 row carries the money with
-       the POS machine option id. */
+    /* A card payment is posted as one channel-4 row: the POS machine option
+       plus the amount. The card type is no longer captured in the modal. */
     cardEntries.forEach((entry) => {
       const posMachineId = entry.posMachineId ?? 0;
 
       if (posMachineId > 0) {
-        addPaymentRow(PAYMENT_CHANNEL_IDS.card, entry.channelOptionId);
         addPaymentRow(
           PAYMENT_CHANNEL_IDS.posMachine,
           posMachineId,
@@ -913,11 +1164,7 @@ const handleAddProduct = async () => {
 
       /* No POS machine recorded on the entry — keep the amount on the card
          row so the payment is not lost. */
-      addPayment(
-        PAYMENT_CHANNEL_IDS.card,
-        entry.amount,
-        entry.channelOptionId,
-      );
+      addPayment(PAYMENT_CHANNEL_IDS.card, entry.amount);
     });
 
     mfsEntries.forEach((entry) =>
@@ -953,14 +1200,14 @@ const handleAddProduct = async () => {
         invoiceDate: new Date().toISOString(),
         totalQty,
         totalProdPrice: r2(grossTotal),
-        discountId: 0,
-        discountPercent: invoiceDiscount,
+        discountId: selectedDiscountId,
+        discountPercent: r2(invoiceDiscountPercent),
         discountAmt: r2(productDiscount + invoiceDiscountAmount),
         adjustmentAmt: r2(Number(adjustment)),
         priceAftrDiscount: r2(netPayableBeforeVat),
         vatBfrDiscount: r2(vatBfrDiscount),
-        vatAftrDiscount: r2(totalVat),
-        returnAmt: 0,
+        vatAftrDiscount: r2(netTotalVat),
+        returnAmt: r2(Number(excAmount)),
         totalPayableAmt: r2(netPayable),
         totalPaid: r2(totalReceived),
         changeAmt: r2(change),
@@ -981,8 +1228,16 @@ const handleAddProduct = async () => {
     setPhoneNumber("");
     setCustomerInfo(null);
     setInvoiceDiscount(0);
+    setSelectedDiscountId(0);
+    setTempLoadError(null);
+    cartTouchedRef.current = false;
     setAdjustment(0);
+    setExcAmount(0);
+    setExcVatAmount(0);
+    setExchangeResetKey((key) => key + 1);
+    setCashInput("");
     setCashReceived(0);
+    setIsGiftBill(false);
     setRefundType("Cash");
     setChangeRefNo("");
     setCardEntries([]);
@@ -1010,6 +1265,27 @@ const handleAddProduct = async () => {
       return;
     }
 
+    /* A refund paid by slip is only traceable with its slip number. */
+    if (refundType === "Slip" && !changeRefNo.trim()) {
+      setSaveNotice({
+        type: "error",
+        message: "CS No is required when the refund type is Slip.",
+      });
+      return;
+    }
+
+    /* The cash field is confirmed with Enter — a save attempted while an
+       amount is still unapplied applies it first and stops there, so the
+       sale can never be saved against a stale cash amount. */
+    if (isCashPending) {
+      commitCash();
+      setSaveNotice({
+        type: "success",
+        message: "Cash amount applied. Press Save again to complete the sale.",
+      });
+      return;
+    }
+
     if (due > 0) {
       setSaveNotice({
         type: "error",
@@ -1029,6 +1305,7 @@ const handleAddProduct = async () => {
     const changeAmount = change;
     const changeType = refundType;
     const changeRef = changeRefNo;
+    const printGiftCopy = isGiftBill;
 
     try {
       const result = await createRegularSale(buildSalePayload());
@@ -1068,12 +1345,12 @@ const handleAddProduct = async () => {
         invoiceBy: user?.displayName || user?.username || "Cashier",
         totalQty,
         totalProductPrice: r2(grossTotal),
-        discountPercent: invoiceDiscount,
+        discountPercent: r2(invoiceDiscountPercent),
         discountAmount: r2(productDiscount + invoiceDiscountAmount),
         adjustmentAmount: r2(Number(adjustment)),
         subTotal: r2(netPayableBeforeVat),
-        exchangedProductAmount: 0,
-        vatAmount: r2(totalVat),
+        exchangedProductAmount: r2(Number(excAmount)),
+        vatAmount: r2(netTotalVat),
         totalPayable: r2(netPayable),
         cashAmount: r2(Number(cashReceived)),
         cardAmount: r2(Number(cardPaymentTotal)),
@@ -1090,7 +1367,11 @@ const handleAddProduct = async () => {
       setSaveNotice({ type: "success", message: "Sale saved successfully." });
 
       /* Show the bill and auto-trigger the print dialog. */
-      setBillData({ sale: billSnapshot, items: billItems });
+      setBillData({
+        sale: billSnapshot,
+        items: billItems,
+        giftCopy: printGiftCopy,
+      });
 
       /* Surface the change due to the customer. */
       if (changeAmount > 0) {
@@ -1200,6 +1481,8 @@ const handleAddProduct = async () => {
       spCode: "",
     }));
 
+    cartTouchedRef.current = true;
+
     setProducts(mappedProducts);
 
     if (invoice.customerContact) {
@@ -1221,93 +1504,225 @@ const handleAddProduct = async () => {
     return () => clearTimeout(timeoutId);
   }, [saveNotice]);
 
-  /* The action bar labels the button "Save [F2]" — keep F2 working. */
+  /* The action bar labels the button "Save [Alt+S]" — keep Alt+S and
+     Ctrl+Enter working, alongside the cashier's other shortcuts. */
   const saveSaleRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     saveSaleRef.current = handleSaveSale;
   });
 
+  /* A shortcut must never fire while one of the modals is in front of the
+     till — saving mid-payment-entry would post a half-paid sale. */
+  const isAnyModalOpen =
+    isCardPaymentModalOpen ||
+    isMfsPaymentModalOpen ||
+    isSlipPaymentModalOpen ||
+    isVoucherPaymentModalOpen ||
+    isWalletOpen ||
+    isCustomerInfoOpen ||
+    isExchangeOpen ||
+    isResumeModalOpen ||
+    deleteAuthOpen ||
+    billData !== null ||
+    changeModal !== null;
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "F2") {
+      if (isAnyModalOpen) return;
+
+      const key = event.key;
+      const lowerKey = key.toLowerCase();
+
+      /* Save — Alt+S (or Ctrl+Enter): same handler as the Save button. */
+      if (
+        (event.altKey && lowerKey === "s") ||
+        (event.ctrlKey && key === "Enter")
+      ) {
         event.preventDefault();
         saveSaleRef.current();
+        return;
+      }
+
+      /* Barcode — F8 or Alt+B. */
+      if (key === "F8" || (event.altKey && lowerKey === "b")) {
+        event.preventDefault();
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      /* Customer phone — F9 or Alt+C. */
+      if (key === "F9" || (event.altKey && lowerKey === "c")) {
+        event.preventDefault();
+        phoneInputRef.current?.focus();
+        return;
+      }
+
+      /* Cash — F2 puts the cashier in the cash amount field. */
+      if (key === "F2") {
+        event.preventDefault();
+        cashInputRef.current?.focus();
+        return;
+      }
+
+      /* Card — F4. */
+      if (key === "F4") {
+        event.preventDefault();
+        setIsCardPaymentModalOpen(true);
+        return;
+      }
+
+      /* MFS — F7. */
+      if (key === "F7") {
+        event.preventDefault();
+        setIsMfsPaymentModalOpen(true);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    
+  }, [isAnyModalOpen]);
+
+  /* The till opens ready to scan. */
+  useEffect(() => {
+    barcodeInputRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-  const loadTempSales = async () => {
-    if (!myBranchId || !counterId) {
-      console.warn(
-        "[sale] Skipping temp-sale load — branchId/counterId not ready.",
-        { branchId: myBranchId, counterId },
-      );
+  /* Temp table restore: pulls whatever the backend stored for this till into
+     the sale table. Runs when the till opens and again whenever the branch or
+     counter changes; the Retry button reuses the same callback. */
+  const loadTempSales = useCallback(async () => {
+    if (!myBranchId) {
       return;
     }
 
+    /* Only the newest load may apply its result. */
+    const attempt = tempLoadAttemptRef.current + 1;
+    tempLoadAttemptRef.current = attempt;
+
+    setIsTempLoading(true);
+    setTempLoadError(null);
+
     try {
-      console.log("[sale] Loading temp sales for:", {
-        branchId: myBranchId,
-        counterId,
-      });
+      for (let tryNo = 1; tryNo <= 2; tryNo += 1) {
+        try {
+          const res = await getTempSalesInfo(myBranchId, counterId);
 
-      const res = await getTempSalesInfo(myBranchId, counterId);
+          if (tempLoadAttemptRef.current !== attempt) {
+            return;
+          }
 
-      console.log("[sale] Temp sales result:", res);
+          if (res.success === false) {
+            setTempLoadError(
+              res.message || "Unable to load the saved temp sale.",
+            );
+            return;
+          }
 
-      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        // Map backend DTO fields to match the CartProduct[] structure. The
-        // temp-sale row only carries a subset of a full product, so the
-        // remaining MasterProduct fields are filled with safe defaults.
-        const mappedProducts: CartProduct[] = res.data.map((item) => ({
-          id: item.productId,
-          barcode: item.barcode,
-          prodName: item.fullName || item.shortName,
-          group: "",
-          type: "",
-          category: null,
-          style: null,
-          brandName: "",
-          size: "",
-          color: null,
-          unitPrice: item.salesPrice,
-          disc: 0,
-          vat: item.vatPercent,
-          productDescription: "",
-          qty: item.qty,
-          spCode: "",
-        }));
+          const rows = Array.isArray(res.data) ? res.data : [];
 
-        setProducts(mappedProducts);
+          if (rows.length === 0) {
+            return;
+          }
 
-        // Restore the customer phone that was saved with the temp sale.
-        const tempContact = res.data.find(
-          (item) => item.customerContact,
-        )?.customerContact;
+          /* A slow response must not wipe what the cashier already scanned. */
+          if (cartTouchedRef.current) {
+            return;
+          }
 
-        if (tempContact) {
-          setPhoneNumber(tempContact);
+          setProducts(mergeTempSaleRows(rows));
+
+          /* Restore the customer phone that was saved with the temp sale. */
+          const tempContact = rows.find((row) => row.customerContact)
+            ?.customerContact;
+
+          if (tempContact) {
+            setPhoneNumber((current) => current.trim() || tempContact);
+          }
+
+          return;
+        } catch (err) {
+          if (tempLoadAttemptRef.current !== attempt) {
+            return;
+          }
+
+          if (tryNo === 2) {
+            console.error("Failed to load temporary sales:", err);
+            setTempLoadError(
+              classifyApiError(err)?.message ??
+                "Unable to load the saved temp sale.",
+            );
+            return;
+          }
+
+          /* One quick retry rides out a dropped connection before the
+             cashier is shown an error. */
+          await new Promise((resolve) => setTimeout(resolve, 400));
         }
-      } else {
-        console.warn(
-          "[sale] No temp sales loaded:",
-          res.message || "empty response",
-          { branchId: myBranchId, counterId, data: res.data },
-        );
       }
-    } catch (err) {
-      console.error("Failed to load temporary sales:", err);
+    } finally {
+      if (tempLoadAttemptRef.current === attempt) {
+        setIsTempLoading(false);
+      }
     }
+  }, [myBranchId, counterId]);
+
+  const retryLoadTempSales = () => {
+    void loadTempSales();
   };
 
-  loadTempSales();
-}, [myBranchId, counterId]);
+  useEffect(() => {
+    /* Deferred a tick so the first render commits before the request starts. */
+    const timerId = window.setTimeout(() => {
+      void loadTempSales();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [loadTempSales]);
+
+  /* Leaving the till mid-request must not update state afterwards. */
+  useEffect(() => {
+    return () => {
+      tempLoadAttemptRef.current += 1;
+    };
+  }, []);
+
+  /* Invoice discount dropdown: GET /api/Discounts once per screen, keeping
+     only the discounts that are usable right now. */
+  useEffect(() => {
+    let cancelled = false;
+
+    getDiscounts()
+      .then((res) => {
+        if (cancelled) return;
+
+        if (res?.success === false) {
+          setDiscountsError(res.message || "Unable to load discounts.");
+          setDiscounts([]);
+          return;
+        }
+
+        setDiscounts(extractDiscountList(res?.data).filter(isDiscountUsableNow));
+        setDiscountsError(null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        console.error("Discount list error:", error);
+        setDiscountsError(
+          classifyApiError(error)?.message ?? "Unable to load discounts.",
+        );
+        setDiscounts([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsDiscountsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /* Payment-type dropdown values for every modal: GET /api/TransactionChannelOptions
      once on page load. Every option's value IS the channelOptionId that the
@@ -1329,12 +1744,7 @@ const handleAddProduct = async () => {
     };
   }, []);
 
-  /* Card modal: card type = channel 3, POS machine = channel 4. */
-  const cardChannelOptions = toChannelDropdownOptions(
-    transactionChannelOptions,
-    PAYMENT_CHANNEL_IDS.card,
-  );
-
+  /* Card modal: POS machines are channel 4. */
   const posMachineOptions = toChannelDropdownOptions(
     transactionChannelOptions,
     PAYMENT_CHANNEL_IDS.posMachine,
@@ -1536,53 +1946,54 @@ const handleAddProduct = async () => {
             p-2.5
           "
           >
-            <div className="flex flex-col gap-3 xl:flex-row">
-              {/* PRODUCT INPUT */}
-              <div className="flex flex-1 gap-2">
-                {/* Barcode - bigger */}
-                <div className="flex-[1.6]">
-                  <Field label="Barcode" icon={<Scan size={13} />}>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={barcodeInput}
-                        onChange={(e) => setBarcodeInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            handleAddProduct();
-                          }
-                        }}
-                        className={smallInputClass}
-                        placeholder="Scan barcode"
-                      />
+          <div className="flex flex-col gap-3 xl:flex-row">
+  {/* PRODUCT INPUT */}
+  <div className="flex flex-1 gap-2">
+    {/* Barcode - slightly decreased from 1.6 to 1.3 */}
+    <div className="flex-[1.3]">
+      <Field label="Barcode" icon={<Scan size={13} />}>
+        <div className="flex gap-1.5">
+          <input
+            ref={barcodeInputRef}
+            value={barcodeInput}
+            onChange={(e) => setBarcodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleAddProduct();
+              }
+            }}
+            className={smallInputClass}
+            placeholder="Scan barcode"
+          />
 
-                      <label
-                        className="
+          <label
+            className="
               flex h-8 w-8 shrink-0 cursor-pointer
               items-center justify-center rounded-md
               border border-[#DDE5DF]
               bg-[#F1F8F3]
             "
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSpEnabled}
-                          onChange={(e) => setIsSpEnabled(e.target.checked)}
-                          className="h-3.5 w-3.5 accent-[#0E9351]"
-                        />
-                      </label>
-                    </div>
-                  </Field>
-                </div>
+          >
+            <input
+              type="checkbox"
+              checked={isSpEnabled}
+              onChange={(e) => setIsSpEnabled(e.target.checked)}
+              className="h-3.5 w-3.5 accent-[#0E9351]"
+            />
+          </label>
+        </div>
+      </Field>
+    </div>
 
-                {/* SP Code */}
-                <div className="flex-1">
-                  <Field label="SP Code" icon={<Package size={13} />}>
-                    <input
-                      value={spCodeInput}
-                      disabled={!isSpEnabled}
-                      onChange={(e) => setSpCodeInput(e.target.value)}
-                      className="
-            h-8 w-full rounded-md
+    {/* SP Code */}
+    <div className="shrink-0">
+      <Field label="SP Code" icon={<Package size={13} />}>
+        <input
+          value={spCodeInput}
+          disabled={!isSpEnabled}
+          onChange={(e) => setSpCodeInput(e.target.value)}
+          className="
+            h-8 w-20 rounded-md
             border border-[#DDE5DF]
             bg-white px-2.5 text-sm
             outline-none
@@ -1591,98 +2002,111 @@ const handleAddProduct = async () => {
             disabled:bg-[#F3F4F2]
             disabled:text-gray-400
           "
-                      placeholder="SP code"
-                    />
-                  </Field>
-                </div>
+          placeholder="SP code"
+        />
+      </Field>
+    </div>
 
-                {/* Quantity */}
-                <div className="w-28 shrink-0">
-                  <Field label="Quantity" icon={<Hash size={13} />}>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        value={qtyInput}
-                        onChange={(e) => setQtyInput(Number(e.target.value))}
-                        className="
+    {/* Quantity */}
+    <div className="w-28 shrink-0">
+      <Field label="Quantity" icon={<Hash size={13} />}>
+        <div className="flex gap-1.5">
+          <input
+            type="number"
+            min={1}
+            value={qtyInput}
+            onChange={(e) => setQtyInput(Number(e.target.value))}
+            className="
               h-8 min-w-0 flex-1
               rounded-md border border-[#DDE5DF]
               px-2 text-center text-sm
               outline-none
               focus:border-[#0E9351]
             "
-                      />
+          />
 
-                      <button
-                        type="button"
-                        onClick={handleAddProduct}
-                        className="
+          <button
+            type="button"
+            onClick={handleAddProduct}
+            className="
               flex h-8 w-8 shrink-0
               items-center justify-center
               rounded-md bg-[#0E9351]
               text-white transition
               hover:bg-[#10673E]
             "
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                  </Field>
-                </div>
-              </div>
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      </Field>
+    </div>
+  </div>
 
-              {/* CUSTOMER / DISCOUNT */}
-              <div className="flex flex-1 gap-2">
-                {/* Customer Phone */}
-                <div className="flex-[1.3]">
-                  <Field label="Customer Phone *" icon={<Phone size={13} />}>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="h-8 min-w-0 flex-1 rounded-md border border-[#DDE5DF] bg-white px-2.5 text-sm text-[#17231D] outline-none placeholder:text-[#9AA29C] focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
-                        placeholder="Phone number"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleOpenCustomerInfo}
-                        disabled={isCustomerLoading}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] transition-all hover:border-[#0E9351] hover:bg-[#E8F5ED] disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Customer Info"
-                      >
-                        <UserRound size={14} />
-                      </button>
-                    </div>
-                  </Field>
-                </div>
+  {/* CUSTOMER / ADJUSTMENT / EXC. AMT / DISCOUNT */}
+  <div className="flex flex-1 gap-2">
+    {/* Customer Phone - slightly decreased from 1.3 to 1.0 */}
+    <div className="flex-1">
+      <Field label="Customer Phone *" icon={<Phone size={13} />}>
+        <div className="flex gap-1.5">
+          <input
+            ref={phoneInputRef}
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            className="h-8 min-w-0 flex-1 rounded-md border border-[#DDE5DF] bg-white px-2.5 text-sm text-[#17231D] outline-none placeholder:text-[#9AA29C] focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
+            placeholder="Phone number"
+          />
+          <button
+            type="button"
+            onClick={handleOpenCustomerInfo}
+            disabled={isCustomerLoading}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E] transition-all hover:border-[#0E9351] hover:bg-[#E8F5ED] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Customer Info"
+          >
+            <UserRound size={14} />
+          </button>
+        </div>
+      </Field>
+    </div>
 
-                {/* Adjustment */}
-                <div className="flex-1">
-                  <Field label="Adjustment" icon={<Settings size={13} />}>
-                    <input
-                      type="number"
-                      value={adjustment === 0 ? "" : adjustment}
-                      onChange={(e) =>
-                        setAdjustment(
-                          e.target.value === "" ? 0 : Number(e.target.value),
-                        )
-                      }
-                      className={smallAdjnputClass}
-                    />
-                  </Field>
-                </div>
+    {/* Adjustment */}
+    <div className="flex-1">
+      <Field label="Adj" icon={<Settings size={13} />}>
+        <input
+          type="number"
+          value={adjustment === 0 ? "" : adjustment}
+          onChange={(e) =>
+            setAdjustment(
+              e.target.value === "" ? 0 : Number(e.target.value),
+            )
+          }
+          className=" h-8
+  w-17
+  rounded-md
+  border
+  border-[#DDE5DF]
+  bg-white
+  px-2.5
+  text-sm
+  text-[#17231D]
+  outline-none
+  transition
+  focus:border-[#0E9351]
+  focus:ring-2
+  focus:ring-[#0E9351]/15"
+        />
+      </Field>
+    </div>
 
-                {/* Invoice Discount */}
-                <div className="flex-1">
-                  <Field label=" Discount" icon={<Percent size={13} />}>
-                    <select
-                      value={invoiceDiscount}
-                      onChange={(e) =>
-                        setInvoiceDiscount(Number(e.target.value))
-                      }
-                      disabled={hasProductDiscount}
-                      className="
+    {/* Invoice Discount — options come from GET /api/Discounts */}
+    <div className="flex-1">
+      <Field label="Discount" icon={<Percent size={13} />}>
+        <select
+          value={selectedDiscountId}
+          onChange={(e) => setSelectedDiscountId(Number(e.target.value))}
+          disabled={hasProductDiscount || isDiscountsLoading}
+          title={discountsError ?? undefined}
+          className="
             h-8 w-full rounded-md
             border border-[#DDE5DF]
             bg-white px-2 text-sm
@@ -1690,20 +2114,64 @@ const handleAddProduct = async () => {
             focus:border-[#0E9351]
             disabled:bg-[#F3F4F2]
           "
-                    >
-                      <option value={0}>No Discount</option>
-                      <option value={5}>5%</option>
-                      <option value={10}>10%</option>
-                      <option value={15}>15%</option>
-                      <option value={20}>20%</option>
-                    </select>
-                  </Field>
-                </div>
-              </div>
-            </div>
+        >
+          <option value={0}>
+            {isDiscountsLoading
+              ? "Loading discounts..."
+              : invoiceDiscount > 0 && !selectedDiscount
+                ? String(invoiceDiscount) + "% (customer)"
+                : "No discount"}
+          </option>
+
+          {discounts.map((record) => (
+            <option key={record.discountId} value={record.discountId}>
+              {formatDiscountOption(record)}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </div>
+  </div>
+</div>
           </section>
 
           {/* ================================================= */}
+          {/* ================================================= */}
+          {/* TEMP TABLE LOAD STATUS */}
+          {/* ================================================= */}
+
+          {(isTempLoading || tempLoadError) && (
+            <div
+              className={
+                "mt-2 flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm " +
+                (tempLoadError
+                  ? "border-[#F3C2C2] bg-[#FCECEC] text-[#B84A4A]"
+                  : "border-[#DDE5DF] bg-[#F1F8F3] text-[#10673E]")
+              }
+            >
+              {tempLoadError ? (
+                <AlertTriangle size={14} className="shrink-0" />
+              ) : (
+                <Loader2 size={14} className="shrink-0 animate-spin" />
+              )}
+
+              <span className="min-w-0 flex-1">
+                {tempLoadError ?? "Loading the saved temp sale..."}
+              </span>
+
+              {tempLoadError && (
+                <button
+                  type="button"
+                  onClick={retryLoadTempSales}
+                  className="inline-flex items-center gap-1 rounded border border-current px-2 py-0.5 text-xs font-semibold transition hover:bg-black/5"
+                >
+                  <RefreshCw size={12} />
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+
           {/* TEMP SALE SYNC WARNING */}
           {/* ================================================= */}
 
@@ -2147,7 +2615,7 @@ const handleAddProduct = async () => {
 
               <MiniSummary label="Gross Total" value={grossTotal.toFixed(2)} />
 
-              <MiniSummary label="SP Items" value={totalSP} />
+              <MiniSummary label="Sales Persons" value={totalSP} />
             </div>
 
             {/* ACTION BUTTONS */}
@@ -2176,6 +2644,7 @@ const handleAddProduct = async () => {
               <ActionButton
                 icon={<ArrowLeftRight size={13} />}
                 text="Exchange"
+                onClick={() => setIsExchangeOpen(true)}
               />
 
               <ActionButton
@@ -2190,7 +2659,7 @@ const handleAddProduct = async () => {
 
               <ActionButton
                 icon={<Save size={13} />}
-                text={isSaving ? "Saving..." : "Save [F2]"}
+                text={isSaving ? "Saving..." : "Save [Alt+S]"}
                 primary
                 onClick={handleSaveSale}
                 disabled={isSaving}
@@ -2331,7 +2800,14 @@ const handleAddProduct = async () => {
                 strong
               />
 
-              <PaymentSummaryRow label="Total VAT" value={totalVat} strong />
+              {/* Credited by the Exchange modal, read-only for the cashier. */}
+              <PaymentSummaryRow
+                label="Exc. Amt"
+                value={Number(excAmount)}
+                strong
+              />
+
+              <PaymentSummaryRow label="Total VAT" value={netTotalVat} strong />
 
               {/* Refund Type & CS No */}
               <div className="px-3 py-1.5">
@@ -2413,19 +2889,27 @@ const handleAddProduct = async () => {
 
               <CompactField label="Cash">
                 <input
-                  type="number"
-                  value={cashReceived === 0 ? "" : cashReceived}
+                  type="text"
+                  inputMode="decimal"
+                  ref={cashInputRef}
+                  value={cashInput}
                   onChange={(e) =>
-                    setCashReceived(
-                      e.target.value === "" ? 0 : Number(e.target.value),
-                    )
+                    setCashInput(sanitizeCashInput(e.target.value))
                   }
-                  className="
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitCash();
+                    }
+                  }}
+                  onBlur={commitCash}
+                  title="Press Enter to apply the cash amount"
+                  placeholder=""
+                  className={`
                     h-9
                     w-full
                     rounded-md
                     border
-                    border-[#B8C4B4]
                     bg-[#F1F8F3]
                     px-2.5
                     text-right
@@ -2433,10 +2917,12 @@ const handleAddProduct = async () => {
                     font-semibold
                     text-[#10673E]
                     outline-none
-                    focus:border-[#0E9351]
-                    focus:ring-2
-                    focus:ring-[#0E9351]/15
-                  "
+                    ${
+                      isCashPending
+                        ? "border-[#E2BA48] ring-2 ring-[#E2BA48]/25"
+                        : "border-[#B8C4B4] focus:border-[#0E9351] focus:ring-2 focus:ring-[#0E9351]/15"
+                    }
+                  `}
                 />
               </CompactField>
             </div>
@@ -2487,6 +2973,7 @@ const handleAddProduct = async () => {
                   text="Voucher"
                   onClick={() => setIsVoucherPaymentModalOpen(true)}
                 />
+                <label></label>
 
                 <label className="
                   flex
@@ -2497,19 +2984,21 @@ const handleAddProduct = async () => {
                   rounded-md
                   border
                   border-[#DDE5DF]
-                  bg-[#F1F8F3]
+                  bg-[#ffffff]
                   px-1
                   text-sm
                   font-medium
                   text-[#10673E]
                   cursor-pointer
                   transition
-                  hover:border-[#0E9351]
-                  hover:bg-[#E8F5ED]
+                  hover:border-[#111111]
+                  hover:bg-[#ffffff]
                 "
                 >
                   <input
                     type="checkbox"
+                    checked={isGiftBill}
+                    onChange={(e) => setIsGiftBill(e.target.checked)}
                     className="h-3.5 w-3.5 accent-[#0E9351]"
                   />
                   <Gift size={14} />
@@ -2566,7 +3055,6 @@ const handleAddProduct = async () => {
         open={isCardPaymentModalOpen}
         onClose={() => setIsCardPaymentModalOpen(false)}
         onCardEntriesChange={setCardEntries}
-        channelOptions={cardChannelOptions}
         posMachineOptions={posMachineOptions}
       />
 
@@ -2608,12 +3096,23 @@ const handleAddProduct = async () => {
         open={isCustomerInfoOpen}
         onClose={() => setIsCustomerInfoOpen(false)}
         customer={customerInfo}
+        onDiscountApplied={handleCustomerDiscountApplied}
       />
 
       <ResumeInvoiceModal
         open={isResumeModalOpen}
         onClose={() => setIsResumeModalOpen(false)}
         onLoad={handleResumeLoad}
+      />
+
+      {/* Kept mounted so the approved-return list is fetched when the screen
+          loads and a loaded exchange survives closing the modal. */}
+      <ExchangeModal
+        open={isExchangeOpen}
+        onClose={() => setIsExchangeOpen(false)}
+        onExchange={handleExchange}
+        onCancelExchange={handleCancelExchange}
+        resetSignal={exchangeResetKey}
       />
 
       <ChangeDueModal
@@ -2630,6 +3129,7 @@ const handleAddProduct = async () => {
           items={billData.items}
           cashierName={user?.displayName || user?.username || "Cashier"}
           storeInfo={{ ...DEFAULT_STORE_INFO, logoUrl: logo }}
+          giftCopy={billData.giftCopy}
           autoPrint
           onClose={() => setBillData(null)}
         />

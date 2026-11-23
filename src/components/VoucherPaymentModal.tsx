@@ -158,6 +158,15 @@ export default function VoucherPaymentModal({
     };
   }, [open, providedChannelOptions]);
 
+  /* The "entry added" notice hides itself after 5 seconds. */
+  useEffect(() => {
+    if (saveNotice?.type !== "success") return;
+
+    const timer = window.setTimeout(() => setSaveNotice(null), 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
+
   const selectedChannel = channelOptions.find(
     (option) => Number(option.value) === channelOptionId,
   );
@@ -338,8 +347,8 @@ export default function VoucherPaymentModal({
 
             {/* Form Grid - 12 column system */}
             <div className="grid grid-cols-12 gap-4">
-              {/* Gift Voucher Amount - 4 cols */}
-              <div className="col-span-4">
+              {/* Gift Voucher Amount - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Ticket size={14} className="text-[#10673E]" />
                   Gift Voucher Amount
@@ -359,8 +368,8 @@ export default function VoucherPaymentModal({
                 </div>
               </div>
 
-              {/* Voucher Type - 4 cols */}
-              <div className="col-span-4">
+              {/* Voucher Type - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Ticket size={14} className="text-[#10673E]" />
                   Voucher Type
@@ -384,8 +393,8 @@ export default function VoucherPaymentModal({
                 </select>
               </div>
 
-              {/* Gift Voucher No - 4 cols */}
-              <div className="col-span-4">
+              {/* Gift Voucher No - 3 cols */}
+              <div className="col-span-3">
                 <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#66736B]">
                   <Hash size={14} className="text-[#10673E]" />
                   Gift Voucher No
@@ -399,14 +408,14 @@ export default function VoucherPaymentModal({
                 />
               </div>
 
-              {/* Add Payment Button - 4 cols, aligned to bottom */}
-              <div className="col-span-4 flex items-end">
+              {/* Add Payment Button - 3 cols, sits beside the last field */}
+              <div className="col-span-3 flex items-end">
                 <button
                   type="button"
                   onClick={handleAddPayment}
                   disabled={!isFormValid}
                   title={isFormValid ? undefined : "Fill every field to add"}
-                  className={`h-10 w-full rounded-lg bg-[#0E9351] px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
+                  className={`h-10 w-full whitespace-nowrap rounded-lg bg-[#0E9351] px-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#10673E] hover:shadow-md active:scale-[0.98] ${
                     isFormValid
                       ? ""
                       : "cursor-not-allowed opacity-50 hover:bg-[#0E9351]"

@@ -462,6 +462,50 @@ export const getPendingProductReturns = async (): Promise<ProductReturnMaster[]>
   return [];
 };
 
+/* ------------------------------------------------------------------ */
+/* GET /api/ProductReturns/approved — approved returns for Exchange     */
+/* ------------------------------------------------------------------ */
+
+/** One approved product return row shown in the Exchange list. */
+export interface ApprovedProductReturn {
+  returnId: number;
+  requestType: string;
+  returnRequestNo: string;
+  customerContactNumber: string;
+  productPrice: number;
+  discountAmount: number;
+  priceAfterDiscount: number;
+  vatBeforeDiscount: number;
+  vatAfterDiscount: number;
+  grossValue: number;
+}
+
+/** GET /api/ProductReturns/approved — every approved return request. */
+export const getApprovedProductReturns = async (): Promise<
+  ApprovedProductReturn[]
+> => {
+  const response = await api.get<
+    RawApiResponse<ApprovedProductReturn[]> | ApprovedProductReturn[]
+  >("ProductReturns/approved");
+
+  const body = response.data;
+
+  // Handle both direct array responses and wrapped { success, data } responses
+  if (Array.isArray(body)) {
+    return body;
+  }
+  if (
+    body &&
+    typeof body === "object" &&
+    "data" in body &&
+    Array.isArray(body.data)
+  ) {
+    return body.data;
+  }
+
+  return [];
+};
+
 /** 2. Get return details by returnId when load button is clicked */
 export const getProductReturnDetails = async (
   returnId: number
